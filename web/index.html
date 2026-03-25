@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Superfast — Brain System</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0a0a0a;
+  --surface: #111111;
+  --surface2: #1a1a1a;
+  --border: #1e1e1e;
+  --border2: #2e2e2e;
+  --text: #f0f0f0;
+  --text2: #888888;
+  --text3: #444444;
+  --green: #4ade80;
+  --red: #f87171;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); color: var(--text); font-family: 'DM Mono', monospace; font-size: 13px; min-height: 100vh; display: flex; }
+
+/* SIDEBAR */
+.sidebar { width: 220px; min-width: 220px; background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; height: 100vh; position: sticky; top: 0; }
+.logo { padding: 24px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 12px; }
+.logo-mark { width: 30px; height: 30px; flex-shrink: 0; }
+.logo-name { font-family: 'DM Serif Display', serif; font-size: 15px; color: var(--text); display: block; }
+.logo-sub { font-size: 10px; color: var(--text3); letter-spacing: 0.08em; text-transform: uppercase; display: block; margin-top: 1px; }
+.nav { padding: 12px 10px; flex: 1; }
+.nav-section { font-size: 10px; color: var(--text3); letter-spacing: 0.1em; text-transform: uppercase; padding: 14px 10px 6px; }
+.nav-item { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 6px; cursor: pointer; color: var(--text2); font-size: 12px; border: none; background: none; width: 100%; text-align: left; transition: all 0.15s; letter-spacing: 0.02em; }
+.nav-item:hover { background: var(--surface2); color: var(--text); }
+.nav-item.active { background: var(--surface2); color: var(--text); }
+.nav-item svg { opacity: 0.5; flex-shrink: 0; }
+.nav-item.active svg { opacity: 1; }
+.sidebar-footer { padding: 14px 16px; border-top: 1px solid var(--border); font-size: 11px; color: var(--text3); }
+.status-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--green); margin-right: 6px; animation: pulse 2s infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+/* MAIN */
+.main { flex: 1; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+.topbar { height: 56px; border-bottom: 1px solid var(--border); display: flex; align-items: center; padding: 0 28px; gap: 14px; flex-shrink: 0; }
+.topbar-title { font-family: 'DM Serif Display', serif; font-size: 16px; color: var(--text); }
+.topbar-sep { color: var(--text3); }
+.topbar-sub { font-size: 11px; color: var(--text3); }
+.topbar-actions { margin-left: auto; }
+.content { flex: 1; overflow-y: auto; padding: 28px; }
+.content::-webkit-scrollbar { width: 4px; }
+.content::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+/* BUTTONS */
+.btn { padding: 7px 16px; border-radius: 5px; font-family: 'DM Mono', monospace; font-size: 12px; cursor: pointer; border: 1px solid var(--border2); background: var(--surface2); color: var(--text2); transition: all 0.15s; }
+.btn:hover { border-color: #444; color: var(--text); }
+.btn-primary { background: var(--text); color: var(--bg); border-color: var(--text); font-weight: 500; }
+.btn-primary:hover { background: #d4d4d4; }
+.btn-primary:disabled { background: var(--surface2); color: var(--text3); border-color: var(--border); cursor: not-allowed; }
+
+/* VIEWS */
+.view { display: none; }
+.view.active { display: block; }
+
+/* PANEL */
+.panel { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.panel-header { padding: 12px 18px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+.panel-label { font-size: 10px; color: var(--text3); letter-spacing: 0.1em; text-transform: uppercase; }
+.panel-body { padding: 18px; }
+
+/* NEW NOTE */
+.note-grid { display: grid; grid-template-columns: 1fr 300px; gap: 20px; max-width: 1080px; }
+.title-input { width: 100%; background: transparent; border: none; border-bottom: 1px solid var(--border); color: var(--text); font-family: 'DM Serif Display', serif; font-size: 22px; line-height: 1.3; padding: 2px 0 12px; outline: none; display: block; }
+.title-input::placeholder { color: var(--text3); font-style: italic; }
+.body-input { width: 100%; height: 360px; background: transparent; border: none; color: var(--text2); font-family: 'DM Mono', monospace; font-size: 13px; line-height: 1.8; resize: none; outline: none; margin-top: 14px; }
+.body-input::placeholder { color: var(--text3); }
+.char-count { padding: 10px 18px; border-top: 1px solid var(--border); font-size: 11px; color: var(--text3); text-align: right; }
+
+/* STATUS */
+.status-box { padding: 10px 14px; border-radius: 6px; font-size: 12px; display: flex; align-items: center; gap: 8px; }
+.status-box.idle { background: rgba(255,255,255,0.03); border: 1px solid var(--border2); color: var(--text3); }
+.status-box.processing { background: rgba(255,255,255,0.05); border: 1px solid var(--border2); color: var(--text2); }
+.status-box.success { background: rgba(74,222,128,0.07); border: 1px solid rgba(74,222,128,0.2); color: var(--green); }
+.status-box.error { background: rgba(248,113,113,0.07); border: 1px solid rgba(248,113,113,0.2); color: var(--red); }
+
+.info-row { display: flex; flex-direction: column; gap: 16px; margin-top: 16px; }
+.info-label { font-size: 10px; color: var(--text3); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 6px; }
+.info-value { font-size: 13px; color: var(--text2); line-height: 1.6; }
+.tags-row { display: flex; flex-wrap: wrap; gap: 5px; }
+.tag { padding: 3px 9px; border: 1px solid var(--border2); border-radius: 3px; font-size: 11px; color: var(--text2); }
+.notion-link { display: flex; align-items: center; gap: 8px; padding: 10px 12px; background: var(--surface2); border: 1px solid var(--border2); border-radius: 6px; color: var(--text); text-decoration: none; font-size: 12px; transition: border-color 0.15s; }
+.notion-link:hover { border-color: #555; }
+
+/* HISTORY */
+.history-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; max-width: 1080px; }
+.note-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; cursor: pointer; transition: border-color 0.15s; }
+.note-card:hover { border-color: var(--border2); }
+.card-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+.card-title { font-family: 'DM Serif Display', serif; font-size: 15px; color: var(--text); line-height: 1.3; }
+.card-badge { font-size: 10px; padding: 2px 7px; border: 1px solid var(--border2); border-radius: 3px; color: var(--text3); flex-shrink: 0; letter-spacing: 0.05em; }
+.card-summary { font-size: 12px; color: var(--text2); line-height: 1.6; margin-bottom: 12px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.card-footer { display: flex; align-items: center; justify-content: space-between; }
+.card-tags { display: flex; gap: 5px; flex-wrap: wrap; }
+.card-tag { font-size: 10px; color: var(--text3); border: 1px solid var(--border); border-radius: 2px; padding: 2px 6px; }
+.card-ext-link { font-size: 11px; color: var(--text3); text-decoration: none; transition: color 0.15s; }
+.card-ext-link:hover { color: var(--text); }
+.card-delete { background: none; border: none; cursor: pointer; color: var(--text3); padding: 2px 4px; border-radius: 3px; font-size: 14px; line-height: 1; transition: color 0.15s; display: none; }
+.note-card:hover .card-delete { display: block; }
+.card-delete:hover { color: var(--red); }
+
+/* HISTORY TOOLBAR */
+.history-toolbar { display: flex; align-items: center; gap: 10px; max-width: 1080px; margin-bottom: 18px; }
+.search-input { flex: 1; background: var(--surface); border: 1px solid var(--border2); border-radius: 6px; color: var(--text); font-family: 'DM Mono', monospace; font-size: 12px; padding: 8px 14px; outline: none; transition: border-color 0.15s; }
+.search-input:focus { border-color: #444; }
+.search-input::placeholder { color: var(--text3); }
+.filter-btn { padding: 7px 12px; border-radius: 5px; font-family: 'DM Mono', monospace; font-size: 11px; cursor: pointer; border: 1px solid var(--border2); background: var(--surface); color: var(--text3); transition: all 0.15s; letter-spacing: 0.04em; }
+.filter-btn:hover { color: var(--text); border-color: #444; }
+.filter-btn.on { background: var(--surface2); color: var(--text); border-color: #444; }
+
+/* CARD PINNED */
+.note-card.pinned { border-color: #333; }
+.card-pin { background: none; border: none; cursor: pointer; color: var(--text3); padding: 2px 4px; font-size: 12px; transition: color 0.15s; display: none; }
+.note-card:hover .card-pin { display: block; }
+.note-card.pinned .card-pin { display: block; color: var(--text2); }
+.card-pin:hover { color: var(--text); }
+.card-reprocess { background: none; border: none; cursor: pointer; color: var(--text3); padding: 2px 4px; font-size: 11px; transition: color 0.15s; display: none; letter-spacing: 0.02em; }
+.note-card:hover .card-reprocess { display: block; }
+.card-reprocess:hover { color: var(--text); }
+
+/* STATS */
+.stats-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px; max-width: 1080px; margin-bottom: 28px; }
+.stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 18px 20px; }
+.stat-value { font-family: 'DM Serif Display', serif; font-size: 32px; color: var(--text); line-height: 1; margin-bottom: 6px; }
+.stat-label { font-size: 11px; color: var(--text3); letter-spacing: 0.06em; text-transform: uppercase; }
+.tags-chart { max-width: 1080px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 18px 20px; margin-bottom: 14px; }
+.tags-chart-title { font-size: 10px; color: var(--text3); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 14px; }
+.tag-bar-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.tag-bar-label { font-size: 11px; color: var(--text2); width: 100px; flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tag-bar-track { flex: 1; height: 4px; background: var(--border2); border-radius: 2px; }
+.tag-bar-fill { height: 100%; background: var(--text2); border-radius: 2px; transition: width 0.4s ease; }
+.tag-bar-count { font-size: 11px; color: var(--text3); width: 20px; text-align: right; flex-shrink: 0; }
+.empty { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 260px; gap: 10px; color: var(--text3); }
+.empty-icon { font-size: 28px; opacity: 0.3; }
+.empty-text { font-size: 12px; letter-spacing: 0.04em; }
+
+/* CHAT */
+.chat-layout { display: grid; grid-template-columns: 1fr 300px; gap: 20px; max-width: 1080px; height: calc(100vh - 114px); }
+.chat-col { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+.chat-messages { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; padding-right: 6px; }
+.chat-messages::-webkit-scrollbar { width: 3px; }
+.chat-messages::-webkit-scrollbar-thumb { background: var(--border2); }
+.msg { display: flex; gap: 10px; animation: fadeUp 0.2s ease; }
+.msg.user { flex-direction: row-reverse; }
+@keyframes fadeUp { from{opacity:0;transform:translateY(5px)} to{opacity:1;transform:translateY(0)} }
+.msg-av { width: 26px; height: 26px; border-radius: 4px; background: var(--surface2); border: 1px solid var(--border2); display: flex; align-items: center; justify-content: center; font-size: 11px; flex-shrink: 0; font-family: 'DM Serif Display', serif; }
+.msg.user .msg-av { background: var(--text); color: var(--bg); border-color: var(--text); }
+.msg-body { max-width: 78%; padding: 10px 13px; border-radius: 6px; font-size: 12px; line-height: 1.7; background: var(--surface); border: 1px solid var(--border); color: var(--text2); }
+.msg.user .msg-body { background: var(--surface2); color: var(--text); border-color: var(--border2); }
+.chat-footer { border-top: 1px solid var(--border); padding-top: 14px; flex-shrink: 0; margin-top: 14px; }
+.chat-row { display: flex; gap: 8px; }
+.chat-in { flex: 1; background: var(--surface); border: 1px solid var(--border2); border-radius: 6px; color: var(--text); font-family: 'DM Mono', monospace; font-size: 13px; padding: 9px 13px; outline: none; transition: border-color 0.15s; }
+.chat-in:focus { border-color: #444; }
+.context-note { display: flex; align-items: center; gap: 9px; padding: 9px 10px; border-radius: 5px; cursor: pointer; border: 1px solid transparent; transition: all 0.15s; }
+.context-note:hover { background: var(--surface2); }
+.context-note.on { background: var(--surface2); border-color: var(--border2); }
+.ctx-check { width: 14px; height: 14px; border: 1px solid var(--border2); border-radius: 3px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+.context-note.on .ctx-check { background: var(--text); border-color: var(--text); }
+.ctx-title { font-size: 12px; color: var(--text2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.context-note.on .ctx-title { color: var(--text); }
+.panel-notes { overflow-y: auto; flex: 1; }
+.chat-panel { display: flex; flex-direction: column; height: 100%; }
+
+/* SPINNER */
+.spin { width: 12px; height: 12px; border: 2px solid var(--border2); border-top-color: var(--text2); border-radius: 50%; animation: rot 0.7s linear infinite; display: inline-block; }
+@keyframes rot { to{transform:rotate(360deg)} }
+</style>
+</head>
+<body>
+
+<aside class="sidebar">
+  <div class="logo">
+    <svg class="logo-mark" viewBox="0 0 30 30" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect width="30" height="30" rx="6" fill="#f0f0f0"/>
+      <path d="M19 8.5H12.5C11.12 8.5 10 9.62 10 11C10 12.38 11.12 13.5 12.5 13.5H17.5C18.88 13.5 20 14.62 20 16C20 17.38 18.88 18.5 17.5 18.5H11" stroke="#0a0a0a" stroke-width="2" stroke-linecap="round"/>
+    </svg>
+    <div>
+      <span class="logo-name">Superfast</span>
+      <span class="logo-sub">Brain System</span>
+    </div>
+  </div>
+
+  <nav class="nav">
+    <div class="nav-section">Workspace</div>
+    <button class="nav-item active" id="btn-new" onclick="showView('new',this)">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+      Nueva nota
+    </button>
+    <button class="nav-item" id="btn-history" onclick="showView('history',this)">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="2" y="3" width="12" height="2" rx="1" fill="currentColor"/><rect x="2" y="7" width="9" height="2" rx="1" fill="currentColor"/><rect x="2" y="11" width="11" height="2" rx="1" fill="currentColor"/></svg>
+      Historial
+    </button>
+    <button class="nav-item" id="btn-stats" onclick="showView('stats',this)">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="2" y="9" width="3" height="5" rx="1" fill="currentColor"/><rect x="6.5" y="6" width="3" height="8" rx="1" fill="currentColor"/><rect x="11" y="3" width="3" height="11" rx="1" fill="currentColor"/></svg>
+      Stats
+    </button>
+    <button class="nav-item" id="btn-chat" onclick="showView('chat',this)">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 4a2 2 0 012-2h8a2 2 0 012 2v6a2 2 0 01-2 2H6l-3 2V4z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+      Chat con notas
+    </button>
+  </nav>
+
+  <div class="sidebar-footer">
+    <span class="status-dot"></span>Gemini 2.5 Flash
+  </div>
+</aside>
+
+<main class="main">
+  <div class="topbar">
+    <span class="topbar-title" id="tb-title">Nueva nota</span>
+    <span class="topbar-sep">/</span>
+    <span class="topbar-sub" id="tb-sub">Escribe y procesa a Notion</span>
+    <div class="topbar-actions">
+      <button class="btn btn-primary" id="process-btn" onclick="processNote()">⚡ Procesar</button>
+    </div>
+  </div>
+
+  <div class="content">
+
+    <!-- VIEW: NUEVA NOTA -->
+    <div class="view active" id="view-new">
+      <div class="note-grid">
+
+        <div class="panel">
+          <div class="panel-header">
+            <span class="panel-label">Contenido</span>
+            <span class="panel-label">markdown</span>
+          </div>
+          <div class="panel-body">
+            <input class="title-input" id="note-title" type="text" placeholder="Título de la nota..." />
+            <textarea class="body-input" id="note-body" placeholder="Escribe el contenido aquí...&#10;&#10;## Sección&#10;- punto uno&#10;- punto dos" oninput="updateCount()"></textarea>
+          </div>
+          <div class="char-count"><span id="char-count">0</span> chars</div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:16px">
+          <div class="panel">
+            <div class="panel-header"><span class="panel-label">Estado</span></div>
+            <div class="panel-body">
+              <div class="status-box idle" id="status-box">Esperando nota...</div>
+              <div class="info-row" id="result-info" style="display:none">
+                <div>
+                  <div class="info-label">Título</div>
+                  <div class="info-value" id="res-title">—</div>
+                </div>
+                <div>
+                  <div class="info-label">Tipo</div>
+                  <div class="info-value" id="res-type">—</div>
+                </div>
+                <div>
+                  <div class="info-label">Tags</div>
+                  <div class="tags-row" id="res-tags"></div>
+                </div>
+                <div>
+                  <div class="info-label">Notion</div>
+                  <a href="#" id="res-link" class="notion-link" target="_blank">
+                    <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M6 3H3a1 1 0 00-1 1v9a1 1 0 001 1h9a1 1 0 001-1v-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M9 2h5v5M14 2L8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    Ver en Notion
+                  </a>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-header"><span class="panel-label">Resumen IA</span></div>
+            <div class="panel-body">
+              <div id="res-summary" style="font-size:12px;color:var(--text3);line-height:1.7">El resumen aparecerá aquí.</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- VIEW: HISTORIAL -->
+    <div class="view" id="view-history">
+      <div class="history-toolbar">
+        <input class="search-input" id="search-input" type="text" placeholder="Buscar notas..." oninput="renderHistory()" />
+        <button class="filter-btn" id="filter-all" onclick="setFilter('all',this)">Todas</button>
+        <button class="filter-btn" id="filter-knowledge" onclick="setFilter('KNOWLEDGE',this)">Knowledge</button>
+        <button class="filter-btn" id="filter-business" onclick="setFilter('BUSINESS',this)">Business</button>
+        <button class="filter-btn" id="filter-pinned" onclick="setFilter('pinned',this)">📌 Pins</button>
+      </div>
+      <div id="history-container"></div>
+    </div>
+
+    <!-- VIEW: STATS -->
+    <div class="view" id="view-stats">
+      <div id="stats-container"></div>
+    </div>
+
+    <!-- VIEW: CHAT -->
+    <div class="view" id="view-chat">
+      <div class="chat-layout">
+        <div class="chat-col">
+          <div class="chat-messages" id="chat-msgs">
+            <div class="msg">
+              <div class="msg-av">S</div>
+              <div class="msg-body">Hola. Selecciona notas en el panel derecho y pregúntame sobre ellas.</div>
+            </div>
+          </div>
+          <div class="chat-footer">
+            <div class="chat-row">
+              <input class="chat-in" id="chat-input" type="text" placeholder="Pregunta sobre tus notas..." onkeydown="chatKey(event)" />
+              <button class="btn btn-primary" onclick="sendChat()">↑</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel chat-panel">
+          <div class="panel-header"><span class="panel-label">Contexto</span></div>
+          <div class="panel-body panel-notes" id="ctx-list">
+            <div style="color:var(--text3);font-size:12px">Procesa notas primero.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</main>
+
+<script>
+var notes = [];
+var selected = {};
+var currentFilter = 'all';
+
+try { notes = JSON.parse(localStorage.getItem('sf_notes') || '[]'); } catch(e) { notes = []; }
+
+function showView(name, el) {
+  document.querySelectorAll('.view').forEach(function(v){ v.classList.remove('active'); });
+  document.querySelectorAll('.nav-item').forEach(function(n){ n.classList.remove('active'); });
+  document.getElementById('view-' + name).classList.add('active');
+  if (el) el.classList.add('active');
+
+  var titles = {
+    'new': ['Nueva nota', 'Escribe y procesa a Notion'],
+    'history': ['Historial', notes.length + ' notas procesadas'],
+    'stats': ['Stats', 'Resumen de tu knowledge base'],
+    'chat': ['Chat con notas', 'Pregunta sobre tu conocimiento']
+  };
+  document.getElementById('tb-title').textContent = titles[name][0];
+  document.getElementById('tb-sub').textContent = titles[name][1];
+  document.getElementById('process-btn').style.display = name === 'new' ? '' : 'none';
+
+  if (name === 'history') renderHistory();
+  if (name === 'stats') renderStats();
+  if (name === 'chat') renderCtx();
+}
+
+function setFilter(f, el) {
+  currentFilter = f;
+  document.querySelectorAll('.filter-btn').forEach(function(b){ b.classList.remove('on'); });
+  if (el) el.classList.add('on');
+  renderHistory();
+}
+
+function updateCount() {
+  var t = document.getElementById('note-title').value.length;
+  var b = document.getElementById('note-body').value.length;
+  document.getElementById('char-count').textContent = t + b;
+}
+
+async function processNote() {
+  var title = document.getElementById('note-title').value.trim();
+  var body = document.getElementById('note-body').value.trim();
+  if (!title && !body) return;
+  var content = title ? ('# ' + title + '\n\n' + body) : body;
+
+  var btn = document.getElementById('process-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spin"></span>';
+  setStatus('processing', '⏳ Procesando con Gemini...');
+  document.getElementById('result-info').style.display = 'none';
+
+  try {
+    var res = await fetch('/process', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content: content })
+    });
+    var data = await res.json();
+    if (data.error) throw new Error(data.error);
+
+    setStatus('success', '✓ Guardado en Notion');
+    document.getElementById('result-info').style.display = 'flex';
+    document.getElementById('res-title').textContent = data.title || '—';
+    document.getElementById('res-type').textContent = data.type || '—';
+    document.getElementById('res-summary').textContent = data.summary || '—';
+    document.getElementById('res-link').href = data.url || '#';
+
+    var tagsEl = document.getElementById('res-tags');
+    tagsEl.innerHTML = '';
+    (data.tags || []).forEach(function(t) {
+      var s = document.createElement('span');
+      s.className = 'tag';
+      s.textContent = t;
+      tagsEl.appendChild(s);
+    });
+
+    data.content = content;
+    data.date = new Date().toISOString();
+    notes.unshift(data);
+    try { localStorage.setItem('sf_notes', JSON.stringify(notes.slice(0,50))); } catch(e){}
+
+  } catch(e) {
+    setStatus('error', '✗ ' + e.message);
+  }
+
+  btn.disabled = false;
+  btn.textContent = '⚡ Procesar';
+}
+
+function setStatus(type, msg) {
+  var box = document.getElementById('status-box');
+  box.className = 'status-box ' + type;
+  box.textContent = msg;
+}
+
+function renderHistory() {
+  var c = document.getElementById('history-container');
+  var q = (document.getElementById('search-input') ? document.getElementById('search-input').value : '').toLowerCase();
+
+  var filtered = notes.filter(function(n, i) {
+    var matchSearch = !q || (n.title||'').toLowerCase().includes(q) || (n.summary||'').toLowerCase().includes(q) || (n.tags||[]).join(' ').toLowerCase().includes(q);
+    var matchFilter = currentFilter === 'all' || (currentFilter === 'pinned' && n.pinned) || n.type === currentFilter;
+    return matchSearch && matchFilter;
+  });
+
+  if (!filtered.length) {
+    c.innerHTML = '<div class="empty"><div class="empty-icon">◎</div><div class="empty-text">' + (q ? 'Sin resultados para "'+esc(q)+'"' : 'Aún no hay notas procesadas') + '</div></div>';
+    return;
+  }
+
+  // Pinned first
+  filtered.sort(function(a,b){ return (b.pinned?1:0)-(a.pinned?1:0); });
+
+  var html = '<div class="history-grid">';
+  filtered.forEach(function(n) {
+    var realIdx = notes.indexOf(n);
+    var tags = (n.tags||[]).slice(0,3).map(function(t){ return '<span class="card-tag">'+esc(t)+'</span>'; }).join('');
+    var pinIcon = n.pinned ? '📌' : '○';
+    html += '<div class="note-card'+(n.pinned?' pinned':'')+'" onclick="window.open(\''+n.url+'\',\'_blank\')">'
+      + '<div class="card-header">'
+      + '<div class="card-title">'+esc(n.title)+'</div>'
+      + '<div style="display:flex;align-items:center;gap:6px">'
+      + '<span class="card-badge">'+esc(n.type)+'</span>'
+      + '<button class="card-pin" onclick="pinNote(event,'+realIdx+')" title="Pin">'+pinIcon+'</button>'
+      + '<button class="card-reprocess" onclick="reprocessNote(event,'+realIdx+')" title="Re-procesar">↻</button>'
+      + '<button class="card-delete" onclick="deleteNote(event,'+realIdx+')" title="Eliminar">×</button>'
+      + '</div></div>'
+      + '<div class="card-summary">'+esc(n.summary||'')+'</div>'
+      + '<div class="card-footer"><div class="card-tags">'+tags+'</div>'
+      + '<a href="'+n.url+'" target="_blank" class="card-ext-link" onclick="event.stopPropagation()">Notion →</a></div>'
+      + '</div>';
+  });
+  html += '</div>';
+  c.innerHTML = html;
+}
+
+function pinNote(e, i) {
+  e.stopPropagation();
+  notes[i].pinned = !notes[i].pinned;
+  try { localStorage.setItem('sf_notes', JSON.stringify(notes)); } catch(e){}
+  renderHistory();
+}
+
+async function reprocessNote(e, i) {
+  e.stopPropagation();
+  var n = notes[i];
+  if (!n.content) { alert('No hay contenido guardado para re-procesar.'); return; }
+  if (!confirm('¿Re-procesar "'+n.title+'" con Gemini?')) return;
+  try {
+    var res = await fetch('/reprocess', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content: n.content })
+    });
+    var data = await res.json();
+    if (data.error) throw new Error(data.error);
+    data.content = n.content;
+    data.date = new Date().toISOString();
+    data.pinned = n.pinned;
+    notes[i] = data;
+    try { localStorage.setItem('sf_notes', JSON.stringify(notes)); } catch(e){}
+    renderHistory();
+    alert('✓ Re-procesado: ' + data.title);
+  } catch(err) {
+    alert('Error: ' + err.message);
+  }
+}
+
+function deleteNote(e, i) {
+  e.stopPropagation();
+  var n = notes[i];
+  var choice = confirm('¿Eliminar "'+n.title+'"?\n\nOK = borrar de historial + Notion\nCancelar = solo del historial');
+  if (choice === null) return;
+
+  if (choice && n.url) {
+    var pageId = n.url.split('-').pop().replace(/\//g,'');
+    fetch('/delete-notion', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ page_id: pageId })
+    }).catch(function(){});
+  }
+
+  notes.splice(i, 1);
+  try { localStorage.setItem('sf_notes', JSON.stringify(notes)); } catch(e){}
+  renderHistory();
+}
+
+function renderStats() {
+  var c = document.getElementById('stats-container');
+  if (!notes.length) {
+    c.innerHTML = '<div class="empty"><div class="empty-icon">◎</div><div class="empty-text">Procesa notas primero</div></div>';
+    return;
+  }
+
+  var knowledge = notes.filter(function(n){ return n.type === 'KNOWLEDGE'; }).length;
+  var business = notes.filter(function(n){ return n.type === 'BUSINESS'; }).length;
+  var pinned = notes.filter(function(n){ return n.pinned; }).length;
+
+  // Tag frequency
+  var tagCount = {};
+  notes.forEach(function(n){
+    (n.tags||[]).forEach(function(t){
+      tagCount[t] = (tagCount[t]||0) + 1;
+    });
+  });
+  var topTags = Object.keys(tagCount).sort(function(a,b){ return tagCount[b]-tagCount[a]; }).slice(0,8);
+  var maxCount = topTags.length ? tagCount[topTags[0]] : 1;
+
+  var statsHtml = '<div class="stats-grid">'
+    + '<div class="stat-card"><div class="stat-value">'+notes.length+'</div><div class="stat-label">Total notas</div></div>'
+    + '<div class="stat-card"><div class="stat-value">'+knowledge+'</div><div class="stat-label">Knowledge</div></div>'
+    + '<div class="stat-card"><div class="stat-value">'+business+'</div><div class="stat-label">Business</div></div>'
+    + '<div class="stat-card"><div class="stat-value">'+pinned+'</div><div class="stat-label">Pinneadas</div></div>'
+    + '</div>';
+
+  if (topTags.length) {
+    statsHtml += '<div class="tags-chart"><div class="tags-chart-title">Tags más usados</div>';
+    topTags.forEach(function(t){
+      var pct = Math.round((tagCount[t]/maxCount)*100);
+      statsHtml += '<div class="tag-bar-row">'
+        + '<div class="tag-bar-label">'+esc(t)+'</div>'
+        + '<div class="tag-bar-track"><div class="tag-bar-fill" style="width:'+pct+'%"></div></div>'
+        + '<div class="tag-bar-count">'+tagCount[t]+'</div>'
+        + '</div>';
+    });
+    statsHtml += '</div>';
+  }
+
+  c.innerHTML = statsHtml;
+}
+
+function renderCtx() {
+  var c = document.getElementById('ctx-list');
+  if (!notes.length) {
+    c.innerHTML = '<div style="color:var(--text3);font-size:12px">Procesa notas primero.</div>';
+    return;
+  }
+  var html = '';
+  notes.forEach(function(n, i) {
+    var on = selected[i] ? 'on' : '';
+    var check = selected[i] ? '<svg width="9" height="9" viewBox="0 0 9 9"><path d="M1.5 4.5l2 2L7.5 2" stroke="#0a0a0a" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>' : '';
+    html += '<div class="context-note '+on+'" onclick="toggleCtx('+i+')">'
+      + '<div class="ctx-check">'+check+'</div>'
+      + '<div class="ctx-title">'+esc(n.title)+'</div></div>';
+  });
+  c.innerHTML = html;
+}
+
+function toggleCtx(i) {
+  selected[i] = !selected[i];
+  renderCtx();
+}
+
+function chatKey(e) {
+  if (e.key === 'Enter') { e.preventDefault(); sendChat(); }
+}
+
+async function sendChat() {
+  var input = document.getElementById('chat-input');
+  var q = input.value.trim();
+  if (!q) return;
+  input.value = '';
+
+  addMsg('user', q);
+
+  var ctx = '';
+  Object.keys(selected).forEach(function(i) {
+    if (selected[i] && notes[i]) {
+      ctx += 'NOTA: ' + notes[i].title + '\n' + (notes[i].content || '') + '\n\n---\n\n';
+    }
+  });
+
+  var loadEl = addMsg('assistant', '<span class="spin"></span>');
+
+  try {
+    var res = await fetch('/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question: q, context: ctx })
+    });
+    var data = await res.json();
+    loadEl.textContent = data.answer || 'Sin respuesta.';
+  } catch(e) {
+    loadEl.textContent = 'Error al consultar.';
+  }
+}
+
+function addMsg(role, html) {
+  var msgs = document.getElementById('chat-msgs');
+  var av = role === 'user' ? 'D' : 'S';
+  var div = document.createElement('div');
+  div.className = 'msg ' + role;
+  div.innerHTML = '<div class="msg-av">'+av+'</div><div class="msg-body"></div>';
+  var body = div.querySelector('.msg-body');
+  body.innerHTML = html;
+  msgs.appendChild(div);
+  msgs.scrollTop = msgs.scrollHeight;
+  return body;
+}
+
+function esc(str) {
+  if (!str) return '';
+  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+</script>
+</body>
+</html>
