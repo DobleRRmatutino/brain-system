@@ -290,6 +290,27 @@ body { background: var(--bg); color: var(--text); font-family: 'DM Mono', monosp
 .panel-notes { overflow-y: auto; flex: 1; }
 .chat-panel { display: flex; flex-direction: column; height: 100%; }
 
+/* ── CLEAR NOTE BUTTON ───────────────────────────────────── */
+.btn-ghost {
+  padding: 7px 14px; border-radius: 5px;
+  font-family: 'DM Mono', monospace; font-size: 12px; cursor: pointer;
+  border: 1px solid var(--border2); background: transparent; color: var(--text3);
+  transition: all 0.15s; white-space: nowrap;
+}
+.btn-ghost:hover { border-color: var(--red); color: var(--red); }
+
+/* ── CHAT FILTER TABS ────────────────────────────────────── */
+.chat-filters { display: flex; gap: 6px; margin-bottom: 10px; }
+.chat-filter-btn {
+  padding: 5px 12px; border-radius: 4px; cursor: pointer;
+  font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: 0.04em;
+  border: 1px solid var(--border2); background: transparent; color: var(--text3);
+  transition: all 0.15s;
+}
+.chat-filter-btn:hover { color: var(--text2); border-color: #444; }
+.chat-filter-btn.active { background: var(--surface2); color: var(--text); border-color: #444; }
+.chat-filter-label { font-size: 10px; color: var(--text3); letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 8px; padding-left: 2px; }
+
 /* ── SPINNER ─────────────────────────────────────────────── */
 .spin { width: 12px; height: 12px; border: 2px solid var(--border2); border-top-color: var(--text2); border-radius: 50%; animation: rot 0.7s linear infinite; display: inline-block; }
 @keyframes rot { to{transform:rotate(360deg)} }
@@ -449,7 +470,8 @@ body { background: var(--bg); color: var(--text); font-family: 'DM Mono', monosp
       <span class="topbar-title" id="tb-title">Nueva nota</span>
       <span class="topbar-sep">/</span>
       <span class="topbar-sub" id="tb-sub">Escribe y procesa a Notion</span>
-      <div class="topbar-actions">
+      <div class="topbar-actions" style="display:flex;gap:8px;align-items:center">
+        <button class="btn-ghost" id="clear-btn" onclick="clearNote()" style="display:none" title="Descartar y nueva nota">✕ Nueva</button>
         <button class="btn btn-primary" id="process-btn" onclick="processNote()">⚡ Procesar</button>
       </div>
     </div>
@@ -539,6 +561,11 @@ body { background: var(--bg); color: var(--text); font-family: 'DM Mono', monosp
               </div>
             </div>
             <div class="chat-footer">
+              <div class="chat-filters">
+                <button class="chat-filter-btn active" id="cf-all" onclick="setChatFilter('all',this)">Todas</button>
+                <button class="chat-filter-btn" id="cf-knowledge" onclick="setChatFilter('KNOWLEDGE',this)">Knowledge</button>
+                <button class="chat-filter-btn" id="cf-business" onclick="setChatFilter('BUSINESS',this)">Business</button>
+              </div>
               <div class="chat-row">
                 <input class="chat-in" id="chat-input" type="text" placeholder="Pregunta sobre tus notas..." onkeydown="chatKey(event)" />
                 <button class="btn btn-primary" onclick="sendChat()">↑</button>
@@ -746,6 +773,17 @@ function showView(name, sidebarEl, bnavId) {
   document.getElementById('tb-title').textContent = titles[name][0];
   document.getElementById('tb-sub').textContent   = titles[name][1];
   document.getElementById('process-btn').style.display = name === 'new' ? '' : 'none';
+  // Clear button: only on new view, only if content exists
+  var clearBtn = document.getElementById('clear-btn');
+  if (clearBtn) {
+    if (name === 'new') {
+      var t = (document.getElementById('note-title').value||'').length;
+      var b = (document.getElementById('note-body').value||'').length;
+      clearBtn.style.display = (t + b > 0) ? '' : 'none';
+    } else {
+      clearBtn.style.display = 'none';
+    }
+  }
   if (name === 'history') renderHistory();
   if (name === 'stats')   renderStats();
   if (name === 'chat')    renderCtx();
@@ -762,6 +800,21 @@ function updateCount() {
   var t = document.getElementById('note-title').value.length;
   var b = document.getElementById('note-body').value.length;
   document.getElementById('char-count').textContent = t + b;
+  // Show/hide clear button when there's content
+  var clearBtn = document.getElementById('clear-btn');
+  if (clearBtn) clearBtn.style.display = (t + b > 0) ? '' : 'none';
+}
+
+function clearNote() {
+  if (!confirm('¿Descartar el contenido actual y empezar una nueva nota?')) return;
+  document.getElementById('note-title').value = '';
+  document.getElementById('note-body').value  = '';
+  document.getElementById('char-count').textContent = '0';
+  document.getElementById('clear-btn').style.display = 'none';
+  setStatus('idle', 'Esperando nota...');
+  document.getElementById('result-info').style.display = 'none';
+  document.getElementById('res-summary').textContent = 'El resumen aparecerá aquí.';
+  document.getElementById('note-title').focus();
 }
 
 // ── PROCESS ──────────────────────────────────────────────────────────────────
@@ -945,11 +998,28 @@ function renderStats() {
 }
 
 // ── CHAT ─────────────────────────────────────────────────────────────────────
+var chatFilter = 'all';
+
+function setChatFilter(f, el) {
+  chatFilter = f;
+  document.querySelectorAll('.chat-filter-btn').forEach(function(b){ b.classList.remove('active'); });
+  el.classList.add('active');
+  renderCtx();
+}
 function renderCtx() {
   var c = document.getElementById('ctx-list');
   if (!notes.length) { c.innerHTML = '<div style="color:var(--text3);font-size:12px">Procesa notas primero.</div>'; return; }
+  var filteredNotes = notes.filter(function(n) {
+    if (chatFilter === 'all') return true;
+    return n.type === chatFilter;
+  });
+  if (!filteredNotes.length) {
+    c.innerHTML = '<div style="color:var(--text3);font-size:12px">No hay notas de tipo ' + chatFilter + '.</div>';
+    return;
+  }
   var html = '';
-  notes.forEach(function(n, i) {
+  filteredNotes.forEach(function(n) {
+    var i  = notes.indexOf(n);
     var on    = selected[i] ? 'on' : '';
     var check = selected[i] ? '<svg width="9" height="9" viewBox="0 0 9 9"><path d="M1.5 4.5l2 2L7.5 2" stroke="#0a0a0a" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>' : '';
     html += '<div class="context-note '+on+'" onclick="toggleCtx('+i+')">' +
