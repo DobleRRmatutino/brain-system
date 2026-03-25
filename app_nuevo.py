@@ -60,11 +60,27 @@ async def chat(request: Request, token: str = Depends(verify_token)):
     try:
         import google.genai as genai
         body = await request.json()
-        question = body.get("question", "")
-        context = body.get("context", "")
-        client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
-        ctx_block = f"NOTAS DE CONTEXTO:\n{context}" if context else "No hay notas seleccionadas."
-        prompt = f"Eres un asistente personal. Responde SOLO basándote en las notas.\n\n{ctx_block}\n\nPREGUNTA: {question}"
+        question   = body.get("question", "")
+        context    = body.get("context", "")
+        ideas_mode = body.get("ideas_mode", False)
+        client     = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+        ctx_block  = f"NOTAS DE CONTEXTO:\n{context}" if context else "No hay notas seleccionadas."
+
+        if ideas_mode:
+            prompt = (
+                "Eres un asistente creativo de brainstorming. "
+                "Basándote en las notas de contexto, genera ideas concretas, "
+                "conexiones no obvias entre conceptos, oportunidades de acción "
+                "y preguntas que vale la pena explorar. "
+                "Sé específico, directo y propositivo. Responde en español.\n\n"
+                f"{ctx_block}\n\nTEMA A EXPLORAR: {question}"
+            )
+        else:
+            prompt = (
+                f"Eres un asistente personal. Responde SOLO basándote en las notas. "
+                f"Responde en español.\n\n{ctx_block}\n\nPREGUNTA: {question}"
+            )
+
         response = client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
         return JSONResponse({"answer": response.text.strip()})
     except Exception as e:
@@ -81,6 +97,72 @@ async def delete_notion(request: Request, token: str = Depends(verify_token)):
         notion = Client(auth=os.getenv("NOTION_TOKEN"))
         notion.pages.update(page_id=page_id, archived=True)
         return JSONResponse({"ok": True})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.post("/set-reminder")
+async def set_reminder(request: Request, token: str = Depends(verify_token)):
+    try:
+        from notion_client import Client
+        body = await request.json()
+        page_id = body.get("page_id", "")
+        date_str = body.get("date", "")  # ISO date string "YYYY-MM-DD" or "" to clear
+        if not page_id:
+            return JSONResponse({"error": "No page_id"}, status_code=400)
+        notion = Client(auth=os.getenv("NOTION_TOKEN"))
+        if date_str:
+            notion.pages.update(
+                page_id=page_id,
+                properties={"Reminder": {"date": {"start": date_str}}}
+            )
+        else:
+            notion.pages.update(
+                page_id=page_id,
+                properties={"Reminder": {"date": None}}
+            )
+        return JSONResponse({"ok": True})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.get("/reminders")
+async def get_reminders(token: str = Depends(verify_token)):
+    try:
+        from notion_client import Client
+        from datetime import date
+        notion = Client(auth=os.getenv("NOTION_TOKEN"))
+        today = date.today().isoformat()
+
+        resp = notion.databases.query(
+            database_id=NOTION_DB_ID,
+            filter={
+                "property": "Reminder",
+                "date": {"is_not_empty": True}
+            },
+            sorts=[{"property": "Reminder", "direction": "ascending"}],
+            page_size=50,
+        )
+
+        reminders = []
+        for page in resp.get("results", []):
+            props = page.get("properties", {})
+            title_prop = props.get("Name", {}).get("title", [])
+            title = title_prop[0]["plain_text"] if title_prop else "Sin título"
+            reminder_prop = props.get("Reminder", {}).get("date")
+            reminder_date = reminder_prop["start"] if reminder_prop else None
+            if not reminder_date:
+                continue
+            is_overdue = reminder_date < today
+            is_today = reminder_date == today
+            reminders.append({
+                "page_id": page["id"],
+                "title": title,
+                "url": page.get("url", ""),
+                "reminder_date": reminder_date,
+                "is_overdue": is_overdue,
+                "is_today": is_today,
+            })
+
+        return JSONResponse({"reminders": reminders})
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
 
@@ -158,20 +240,25 @@ async def get_notes(token: str = Depends(verify_token)):
             # Date (created_time)
             created = page.get("created_time", "")
 
+            # Reminder (date)
+            reminder_prop = props.get("Reminder", {}).get("date")
+            reminder_date = reminder_prop["start"] if reminder_prop else None
+
             # Notion URL
             url = page.get("url", "")
 
             notes.append({
-                "title":    title,
-                "type":     note_type,
-                "tags":     tags,
-                "summary":  summary,
-                "insights": insights,
-                "actions":  actions,
-                "status":   status,
-                "date":     created,
-                "url":      url,
-                "page_id":  page["id"],
+                "title":         title,
+                "type":          note_type,
+                "tags":          tags,
+                "summary":       summary,
+                "insights":      insights,
+                "actions":       actions,
+                "status":        status,
+                "date":          created,
+                "url":           url,
+                "page_id":       page["id"],
+                "reminder_date": reminder_date,
             })
 
         return JSONResponse({"notes": notes})
