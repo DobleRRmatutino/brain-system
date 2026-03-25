@@ -517,7 +517,9 @@ body { background: var(--bg); color: var(--text); font-family: 'DM Mono', monosp
           <button class="filter-btn" id="filter-knowledge" onclick="setFilter('KNOWLEDGE',this)">Knowledge</button>
           <button class="filter-btn" id="filter-business" onclick="setFilter('BUSINESS',this)">Business</button>
           <button class="filter-btn" id="filter-pinned" onclick="setFilter('pinned',this)">📌 Pins</button>
+          <button class="filter-btn" id="sync-btn" onclick="syncFromNotion()" title="Sincronizar desde Notion">⟳ Sync</button>
         </div>
+        <div id="sync-status" style="display:none;font-size:11px;color:var(--text3);margin-bottom:10px;max-width:1080px"></div>
         <div id="history-container"></div>
       </div>
 
@@ -645,6 +647,74 @@ var currentFilter = 'all';
 
 function initApp() {
   try { notes = JSON.parse(localStorage.getItem('sf_notes') || '[]'); } catch(e) { notes = []; }
+  // Auto-sync desde Notion al iniciar (silencioso, en background)
+  syncFromNotion(true);
+}
+
+// ── NOTION SYNC ───────────────────────────────────────────────────────────────
+async function syncFromNotion(silent) {
+  var btn      = document.getElementById('sync-btn');
+  var statusEl = document.getElementById('sync-status');
+  if (btn) { btn.textContent = '⟳ ...'; btn.disabled = true; }
+  if (!silent && statusEl) { statusEl.style.display = 'block'; statusEl.textContent = 'Sincronizando con Notion...'; }
+  try {
+    var res = await fetch('/notes', {
+      method: 'GET',
+      headers: authHeaders()
+    });
+    if (res.status === 401) { doLogout(); return; }
+    var data = await res.json();
+    if (data.error) throw new Error(data.error);
+
+    // Merge: preserve local fields (pinned, content) by page_id
+    var localMap = {};
+    notes.forEach(function(n) {
+      if (n.page_id) localMap[n.page_id] = n;
+      else if (n.url) {
+        // fallback: derive page_id from URL
+        var id = n.url.split('-').pop().replace(/\//g,'');
+        localMap[id] = n;
+      }
+    });
+
+    notes = data.notes.map(function(n) {
+      var local = localMap[n.page_id] || localMap[n.page_id.replace(/-/g,'')] || {};
+      return Object.assign({}, n, {
+        pinned:  local.pinned  || false,
+        content: local.content || ''
+      });
+    });
+
+    try { localStorage.setItem('sf_notes', JSON.stringify(notes.slice(0, 100))); } catch(e) {}
+
+    // Refresh any open views
+    var histActive = document.getElementById('view-history').classList.contains('active');
+    var statsActive = document.getElementById('view-stats').classList.contains('active');
+    var chatActive  = document.getElementById('view-chat').classList.contains('active');
+    if (histActive)  renderHistory();
+    if (statsActive) renderStats();
+    if (chatActive)  renderCtx();
+
+    // Update subtitle count
+    var tbSub = document.getElementById('tb-sub');
+    if (tbSub && document.getElementById('view-history').classList.contains('active')) {
+      tbSub.textContent = notes.length + ' notas procesadas';
+    }
+
+    if (!silent && statusEl) {
+      statusEl.textContent = '✓ ' + notes.length + ' notas sincronizadas desde Notion';
+      statusEl.style.color = 'var(--green)';
+      setTimeout(function(){ statusEl.style.display = 'none'; statusEl.style.color = 'var(--text3)'; }, 3000);
+    }
+  } catch(e) {
+    if (!silent && statusEl) {
+      statusEl.style.display = 'block';
+      statusEl.textContent = '✗ Error al sincronizar: ' + e.message;
+      statusEl.style.color = 'var(--red)';
+      setTimeout(function(){ statusEl.style.display = 'none'; statusEl.style.color = 'var(--text3)'; }, 5000);
+    }
+  }
+  if (btn) { btn.textContent = '⟳ Sync'; btn.disabled = false; }
 }
 
 // ── VIEWS ────────────────────────────────────────────────────────────────────

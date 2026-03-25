@@ -95,6 +95,90 @@ async def reprocess(request: Request, token: str = Depends(verify_token)):
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
 
+# ── Notion Sync ───────────────────────────────────────────────────────────────
+NOTION_DB_ID = "32d95c1828928086a307fcf471e4ffc3"
+
+@app.get("/notes")
+async def get_notes(token: str = Depends(verify_token)):
+    try:
+        from notion_client import Client
+        notion = Client(auth=os.getenv("NOTION_TOKEN"))
+
+        results = []
+        cursor = None
+
+        # Paginate through all pages in the database
+        while True:
+            kwargs = {
+                "database_id": NOTION_DB_ID,
+                "sorts": [{"property": "Name", "direction": "descending"}],
+                "page_size": 100,
+            }
+            if cursor:
+                kwargs["start_cursor"] = cursor
+
+            resp = notion.databases.query(**kwargs)
+            results.extend(resp.get("results", []))
+
+            if not resp.get("has_more"):
+                break
+            cursor = resp.get("next_cursor")
+
+        notes = []
+        for page in results:
+            props = page.get("properties", {})
+
+            # Name / title
+            title_prop = props.get("Name", {}).get("title", [])
+            title = title_prop[0]["plain_text"] if title_prop else "Sin título"
+
+            # Type (select)
+            type_prop = props.get("Type", {}).get("select")
+            note_type = type_prop["name"] if type_prop else "KNOWLEDGE"
+
+            # Tags (multi_select)
+            tags = [t["name"] for t in props.get("Tags", {}).get("multi_select", [])]
+
+            # Summary (rich_text)
+            summary_prop = props.get("Summary", {}).get("rich_text", [])
+            summary = summary_prop[0]["plain_text"] if summary_prop else ""
+
+            # Insights (rich_text)
+            insights_prop = props.get("Insights", {}).get("rich_text", [])
+            insights = insights_prop[0]["plain_text"] if insights_prop else ""
+
+            # Actions (rich_text)
+            actions_prop = props.get("Actions", {}).get("rich_text", [])
+            actions = actions_prop[0]["plain_text"] if actions_prop else ""
+
+            # Status (select)
+            status_prop = props.get("Status", {}).get("select")
+            status = status_prop["name"] if status_prop else ""
+
+            # Date (created_time)
+            created = page.get("created_time", "")
+
+            # Notion URL
+            url = page.get("url", "")
+
+            notes.append({
+                "title":    title,
+                "type":     note_type,
+                "tags":     tags,
+                "summary":  summary,
+                "insights": insights,
+                "actions":  actions,
+                "status":   status,
+                "date":     created,
+                "url":      url,
+                "page_id":  page["id"],
+            })
+
+        return JSONResponse({"notes": notes})
+
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
