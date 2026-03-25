@@ -311,7 +311,10 @@ body { background: var(--bg); color: var(--text); font-family: 'DM Mono', monosp
 .chat-filter-btn.active { background: var(--surface2); color: var(--text); border-color: #444; }
 .chat-filter-label { font-size: 10px; color: var(--text3); letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 8px; padding-left: 2px; }
 
-/* ── BULK SELECT ─────────────────────────────────────────── */
+/* ── EXPORT ──────────────────────────────────────────────── */
+.export-group { display: flex; gap: 4px; }
+.export-btn { letter-spacing: 0.02em; }
+.export-btn:hover { color: var(--green); border-color: rgba(74,222,128,0.3); }
 .bulk-bar {
   display: none; align-items: center; gap: 10px;
   padding: 8px 14px; background: var(--surface2);
@@ -603,6 +606,10 @@ body { background: var(--bg); color: var(--text); font-family: 'DM Mono', monosp
           <button class="filter-btn" id="filter-pinned" onclick="setFilter('pinned',this)">📌 Pins</button>
           <button class="filter-btn" id="sync-btn" onclick="syncFromNotion()" title="Sincronizar desde Notion">⟳ Sync</button>
           <button class="filter-btn" id="bulk-toggle" onclick="toggleBulkMode()" title="Selección múltiple">☐ Seleccionar</button>
+          <div class="export-group">
+            <button class="filter-btn export-btn" onclick="exportNotes('json')" title="Exportar JSON">↓ JSON</button>
+            <button class="filter-btn export-btn" onclick="exportNotes('csv')" title="Exportar CSV">↓ CSV</button>
+          </div>
         </div>
         <div class="bulk-bar" id="bulk-bar">
           <span class="bulk-count" id="bulk-count">0 seleccionadas</span>
@@ -1316,6 +1323,75 @@ async function saveEditedNote() {
     saveBtn.disabled    = false;
     saveBtn.textContent = '⚡ Re-procesar y guardar';
   }
+}
+
+// ── EXPORT ───────────────────────────────────────────────────────────────────
+function exportNotes(format) {
+  // Export only the currently visible/filtered notes (same logic as renderHistory)
+  var q = (document.getElementById('search-input') ? document.getElementById('search-input').value : '').toLowerCase();
+  var filtered = notes.filter(function(n) {
+    var matchSearch = !q ||
+      (n.title   || '').toLowerCase().includes(q) ||
+      (n.summary || '').toLowerCase().includes(q) ||
+      (n.tags    || []).join(' ').toLowerCase().includes(q);
+    var matchFilter = currentFilter === 'all' ||
+      (currentFilter === 'pinned' && n.pinned) ||
+       n.type === currentFilter;
+    return matchSearch && matchFilter;
+  });
+
+  if (!filtered.length) { alert('No hay notas para exportar con el filtro actual.'); return; }
+
+  var ts   = new Date().toISOString().slice(0,10);
+  var name = 'brain-system-' + ts + '-' + filtered.length + 'notas';
+
+  if (format === 'json') {
+    var payload = filtered.map(function(n) {
+      return {
+        title:    n.title    || '',
+        type:     n.type     || '',
+        date:     n.date     || '',
+        tags:     n.tags     || [],
+        summary:  n.summary  || '',
+        insights: n.insights || '',
+        actions:  n.actions  || '',
+        status:   n.status   || '',
+        pinned:   n.pinned   || false,
+        url:      n.url      || '',
+        page_id:  n.page_id  || ''
+      };
+    });
+    download(JSON.stringify(payload, null, 2), name + '.json', 'application/json');
+
+  } else if (format === 'csv') {
+    var cols = ['title','type','date','tags','summary','insights','actions','status','pinned','url','page_id'];
+    var rows = [cols.join(',')];
+    filtered.forEach(function(n) {
+      var row = cols.map(function(col) {
+        var val = col === 'tags'
+          ? (n.tags || []).join('; ')
+          : String(n[col] !== undefined && n[col] !== null ? n[col] : '');
+        // Escape: wrap in quotes, double inner quotes
+        val = val.replace(/\r?\n/g, ' ');
+        return '"' + val.replace(/"/g, '""') + '"';
+      });
+      rows.push(row.join(','));
+    });
+    // BOM for Excel UTF-8
+    download('\uFEFF' + rows.join('\r\n'), name + '.csv', 'text/csv;charset=utf-8;');
+  }
+}
+
+function download(content, filename, mime) {
+  var blob = new Blob([content], { type: mime });
+  var url  = URL.createObjectURL(blob);
+  var a    = document.createElement('a');
+  a.href     = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(function(){ URL.revokeObjectURL(url); }, 1000);
 }
 
 // ── BOOT ─────────────────────────────────────────────────────────────────────
