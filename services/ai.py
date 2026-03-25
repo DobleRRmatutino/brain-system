@@ -7,16 +7,17 @@ client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
 PROMPT_TEMPLATE = """
 You are a personal knowledge assistant. Analyze the following note and extract metadata.
-Do NOT rewrite the content. Return a JSON object with this exact structure:
+Do NOT rewrite the content. ALWAYS respond in Spanish. All text values in the JSON (title, summary, actions, insights) MUST be written in Spanish.
+Return a JSON object with this exact structure:
 
 {{
-  "title": "clear concise title",
-  "type": "KNOWLEDGE or BUSINESS",
-  "summary": "2-3 sentence summary",
-  "tags": ["tag1", "tag2", "tag3"],
-  "actions": "concrete next steps if any, or null",
-  "insights": "key insight or takeaway in 1-2 sentences, or null",
-  "status": "INBOX"
+  "title": "título claro y conciso",
+    "type": "KNOWLEDGE or BUSINESS",
+      "summary": "resumen de 2-3 oraciones",
+        "tags": ["tag1", "tag2", "tag3"],
+          "actions": "próximos pasos concretos si los hay, o null",
+            "insights": "idea clave o aprendizaje en 1-2 oraciones, o null",
+              "status": "INBOX"
 }}
 
 Rules:
@@ -32,9 +33,9 @@ Raw note:
 """
 
 def process_note(content: str) -> str:
-    prompt = PROMPT_TEMPLATE.format(content=content)
-    response = client.models.generate_content(
-        model="gemini-2.5-flash",
-        contents=prompt
-    )
-    return response.text.strip()
+      prompt = PROMPT_TEMPLATE.format(content=content)
+      response = client.models.generate_content(
+          model="gemini-2.5-flash",
+          contents=prompt
+      )
+      return response.text.strip()
