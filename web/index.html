@@ -565,6 +565,7 @@ body { background: var(--bg); color: var(--text); font-family: 'DM Mono', monosp
                 <button class="chat-filter-btn active" id="cf-all" onclick="setChatFilter('all',this)">Todas</button>
                 <button class="chat-filter-btn" id="cf-knowledge" onclick="setChatFilter('KNOWLEDGE',this)">Knowledge</button>
                 <button class="chat-filter-btn" id="cf-business" onclick="setChatFilter('BUSINESS',this)">Business</button>
+                <button class="chat-filter-btn" id="cf-ideas" onclick="toggleIdeasMode(this)" style="margin-left:auto;border-color:transparent;color:var(--text3)">💡 Ideas</button>
               </div>
               <div class="chat-row">
                 <input class="chat-in" id="chat-input" type="text" placeholder="Pregunta sobre tus notas..." onkeydown="chatKey(event)" />
@@ -999,12 +1000,24 @@ function renderStats() {
 
 // ── CHAT ─────────────────────────────────────────────────────────────────────
 var chatFilter = 'all';
+var ideasMode  = false;
 
 function setChatFilter(f, el) {
   chatFilter = f;
-  document.querySelectorAll('.chat-filter-btn').forEach(function(b){ b.classList.remove('active'); });
+  document.querySelectorAll('.chat-filter-btn:not(#cf-ideas)').forEach(function(b){ b.classList.remove('active'); });
   el.classList.add('active');
   renderCtx();
+}
+
+function toggleIdeasMode(el) {
+  ideasMode = !ideasMode;
+  el.classList.toggle('active', ideasMode);
+  el.style.borderColor = ideasMode ? '#444' : 'transparent';
+  el.style.color       = ideasMode ? 'var(--text)' : 'var(--text3)';
+  var input = document.getElementById('chat-input');
+  input.placeholder = ideasMode
+    ? 'Tema o área para explorar ideas...'
+    : 'Pregunta sobre tus notas...';
 }
 function renderCtx() {
   var c = document.getElementById('ctx-list');
@@ -1047,15 +1060,24 @@ async function sendChat() {
   var ctx = '';
   Object.keys(selected).forEach(function(i) {
     if (selected[i] && notes[i]) {
-      ctx += 'NOTA: ' + notes[i].title + '\n' + (notes[i].content || '') + '\n\n---\n\n';
+      ctx += 'NOTA: ' + notes[i].title + '\n' + (notes[i].content || notes[i].summary || '') + '\n\n---\n\n';
     }
   });
   var loadEl = addMsg('assistant', '<span class="spin"></span>');
   try {
+    var prompt;
+    if (ideasMode) {
+      var ctxBlock = ctx ? 'NOTAS DE CONTEXTO:\n' + ctx : 'No hay notas seleccionadas, usa tu criterio general.';
+      prompt = 'Eres un asistente creativo de brainstorming. Basándote en las notas de contexto, genera ideas concretas, conexiones no obvias entre conceptos, oportunidades de acción y preguntas que vale la pena explorar. Sé específico, directo y propositivo. Responde en español.\n\n' + ctxBlock + '\n\nTEMA A EXPLORAR: ' + q;
+    } else {
+      prompt = null; // backend usa su propio prompt
+    }
+    var body = { question: q, context: ctx };
+    if (ideasMode) body.ideas_mode = true;
     var res = await fetch('/chat', {
       method: 'POST',
       headers: authHeaders(),
-      body: JSON.stringify({ question: q, context: ctx })
+      body: JSON.stringify(body)
     });
     if (res.status === 401) { doLogout(); return; }
     var data = await res.json();

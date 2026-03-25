@@ -60,11 +60,27 @@ async def chat(request: Request, token: str = Depends(verify_token)):
     try:
         import google.genai as genai
         body = await request.json()
-        question = body.get("question", "")
-        context = body.get("context", "")
-        client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
-        ctx_block = f"NOTAS DE CONTEXTO:\n{context}" if context else "No hay notas seleccionadas."
-        prompt = f"Eres un asistente personal. Responde SOLO basándote en las notas.\n\n{ctx_block}\n\nPREGUNTA: {question}"
+        question   = body.get("question", "")
+        context    = body.get("context", "")
+        ideas_mode = body.get("ideas_mode", False)
+        client     = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+        ctx_block  = f"NOTAS DE CONTEXTO:\n{context}" if context else "No hay notas seleccionadas."
+
+        if ideas_mode:
+            prompt = (
+                "Eres un asistente creativo de brainstorming. "
+                "Basándote en las notas de contexto, genera ideas concretas, "
+                "conexiones no obvias entre conceptos, oportunidades de acción "
+                "y preguntas que vale la pena explorar. "
+                "Sé específico, directo y propositivo. Responde en español.\n\n"
+                f"{ctx_block}\n\nTEMA A EXPLORAR: {question}"
+            )
+        else:
+            prompt = (
+                f"Eres un asistente personal. Responde SOLO basándote en las notas. "
+                f"Responde en español.\n\n{ctx_block}\n\nPREGUNTA: {question}"
+            )
+
         response = client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
         return JSONResponse({"answer": response.text.strip()})
     except Exception as e:
