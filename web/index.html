@@ -311,6 +311,68 @@ body { background: var(--bg); color: var(--text); font-family: 'DM Mono', monosp
 .chat-filter-btn.active { background: var(--surface2); color: var(--text); border-color: #444; }
 .chat-filter-label { font-size: 10px; color: var(--text3); letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 8px; padding-left: 2px; }
 
+/* ── BULK SELECT ─────────────────────────────────────────── */
+.bulk-bar {
+  display: none; align-items: center; gap: 10px;
+  padding: 8px 14px; background: var(--surface2);
+  border: 1px solid var(--border2); border-radius: 6px;
+  max-width: 1080px; margin-bottom: 14px;
+}
+.bulk-bar.visible { display: flex; }
+.bulk-count { font-size: 12px; color: var(--text2); flex: 1; }
+.btn-danger {
+  padding: 6px 14px; border-radius: 5px;
+  font-family: 'DM Mono', monospace; font-size: 12px; cursor: pointer;
+  border: 1px solid rgba(248,113,113,0.3); background: rgba(248,113,113,0.08);
+  color: var(--red); transition: all 0.15s; white-space: nowrap;
+}
+.btn-danger:hover { background: rgba(248,113,113,0.15); border-color: var(--red); }
+.note-card.selecting { cursor: default; }
+.note-card.bulk-selected { border-color: #555; background: var(--surface2); }
+.card-checkbox {
+  width: 15px; height: 15px; border: 1px solid var(--border2); border-radius: 3px;
+  flex-shrink: 0; display: none; align-items: center; justify-content: center;
+  background: var(--surface);
+}
+.selecting-mode .card-checkbox { display: flex; }
+.note-card.bulk-selected .card-checkbox { background: var(--text); border-color: var(--text); }
+
+/* ── EDIT MODAL ──────────────────────────────────────────── */
+.modal-overlay {
+  display: none; position: fixed; inset: 0;
+  background: rgba(0,0,0,0.7); z-index: 500;
+  align-items: center; justify-content: center; padding: 20px;
+}
+.modal-overlay.visible { display: flex; }
+.modal {
+  background: var(--surface); border: 1px solid var(--border2);
+  border-radius: 10px; width: 100%; max-width: 620px;
+  max-height: 90vh; display: flex; flex-direction: column;
+}
+.modal-header {
+  padding: 16px 20px; border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;
+}
+.modal-title { font-family: 'DM Serif Display', serif; font-size: 15px; color: var(--text); }
+.modal-close { background: none; border: none; color: var(--text3); cursor: pointer; font-size: 18px; line-height: 1; padding: 2px 6px; border-radius: 3px; transition: color 0.15s; }
+.modal-close:hover { color: var(--text); }
+.modal-body { padding: 20px; overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 14px; }
+.modal-footer { padding: 14px 20px; border-top: 1px solid var(--border); display: flex; gap: 8px; justify-content: flex-end; flex-shrink: 0; }
+.modal-input {
+  width: 100%; background: var(--surface2); border: 1px solid var(--border2);
+  border-radius: 6px; color: var(--text); font-family: 'DM Mono', monospace;
+  font-size: 13px; padding: 9px 13px; outline: none; transition: border-color 0.15s;
+}
+.modal-input:focus { border-color: #444; }
+.modal-textarea {
+  width: 100%; height: 240px; background: var(--surface2); border: 1px solid var(--border2);
+  border-radius: 6px; color: var(--text2); font-family: 'DM Mono', monospace;
+  font-size: 13px; line-height: 1.7; padding: 9px 13px; outline: none;
+  resize: vertical; transition: border-color 0.15s;
+}
+.modal-textarea:focus { border-color: #444; }
+.modal-label { font-size: 10px; color: var(--text3); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 5px; }
+
 /* ── SPINNER ─────────────────────────────────────────────── */
 .spin { width: 12px; height: 12px; border: 2px solid var(--border2); border-top-color: var(--text2); border-radius: 50%; animation: rot 0.7s linear infinite; display: inline-block; }
 @keyframes rot { to{transform:rotate(360deg)} }
@@ -540,6 +602,12 @@ body { background: var(--bg); color: var(--text); font-family: 'DM Mono', monosp
           <button class="filter-btn" id="filter-business" onclick="setFilter('BUSINESS',this)">Business</button>
           <button class="filter-btn" id="filter-pinned" onclick="setFilter('pinned',this)">📌 Pins</button>
           <button class="filter-btn" id="sync-btn" onclick="syncFromNotion()" title="Sincronizar desde Notion">⟳ Sync</button>
+          <button class="filter-btn" id="bulk-toggle" onclick="toggleBulkMode()" title="Selección múltiple">☐ Seleccionar</button>
+        </div>
+        <div class="bulk-bar" id="bulk-bar">
+          <span class="bulk-count" id="bulk-count">0 seleccionadas</span>
+          <button class="btn-ghost" onclick="toggleBulkMode()">Cancelar</button>
+          <button class="btn-danger" onclick="bulkDelete()">🗑 Eliminar seleccionadas</button>
         </div>
         <div id="sync-status" style="display:none;font-size:11px;color:var(--text3);margin-bottom:10px;max-width:1080px"></div>
         <div id="history-container"></div>
@@ -584,7 +652,33 @@ body { background: var(--bg); color: var(--text); font-family: 'DM Mono', monosp
 
     </div>
   </main>
-</div>
+
+  <!-- ── EDIT MODAL ───────────────────────────────────────────────────────── -->
+  <div class="modal-overlay" id="edit-modal" onclick="closeEditModal(event)">
+    <div class="modal">
+      <div class="modal-header">
+        <span class="modal-title">Editar nota</span>
+        <button class="modal-close" onclick="closeEditModal()">×</button>
+      </div>
+      <div class="modal-body">
+        <div>
+          <div class="modal-label">Título</div>
+          <input class="modal-input" id="edit-title" type="text" placeholder="Título de la nota..." />
+        </div>
+        <div>
+          <div class="modal-label">Contenido</div>
+          <textarea class="modal-textarea" id="edit-body" placeholder="Contenido de la nota..."></textarea>
+        </div>
+        <div id="edit-status" style="display:none;font-size:12px;padding:8px 12px;border-radius:5px"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn" onclick="closeEditModal()">Cancelar</button>
+        <button class="btn btn-primary" id="edit-save-btn" onclick="saveEditedNote()">⚡ Re-procesar y guardar</button>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /#app -->
 
 <script>
 // ── AUTH ─────────────────────────────────────────────────────────────────────
@@ -887,25 +981,35 @@ function renderHistory() {
     return;
   }
   filtered.sort(function(a,b){ return (b.pinned?1:0)-(a.pinned?1:0); });
-  var html = '<div class="history-grid">';
+  var html = '<div class="history-grid' + (bulkMode ? ' selecting-mode' : '') + '">';
   filtered.forEach(function(n) {
     var realIdx = notes.indexOf(n);
     var tags    = (n.tags||[]).slice(0,3).map(function(t){ return '<span class="card-tag">'+esc(t)+'</span>'; }).join('');
     var pinIcon = n.pinned ? '📌' : '○';
     var dateStr = n.date ? new Date(n.date).toLocaleDateString('es-PE', {day:'2-digit',month:'short',year:'numeric'}) : '';
-    html += '<div class="note-card'+(n.pinned?' pinned':'')+'" onclick="window.open(\''+n.url+'\',\'_blank\')">' +
+    var isBulkSel = bulkMode && bulkSelected[n.page_id];
+    var cardClick = bulkMode
+      ? 'onclick="toggleBulkCard(event,\''+n.page_id+'\')"'
+      : 'onclick="window.open(\''+n.url+'\',\'_blank\')"';
+    html += '<div class="note-card'+(n.pinned?' pinned':'')+(isBulkSel?' bulk-selected':'')+'" '+cardClick+'>' +
       '<div class="card-header">' +
-        '<div class="card-title">'+esc(n.title)+'</div>' +
-        '<div style="display:flex;align-items:center;gap:6px">' +
+        '<div style="display:flex;align-items:flex-start;gap:8px;flex:1;min-width:0">' +
+          '<div class="card-checkbox">'+(isBulkSel?'<svg width="9" height="9" viewBox="0 0 9 9"><path d="M1.5 4.5l2 2L7.5 2" stroke="#0a0a0a" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>':'')+'</div>' +
+          '<div class="card-title">'+esc(n.title)+'</div>' +
+        '</div>' +
+        '<div style="display:flex;align-items:center;gap:6px;flex-shrink:0">' +
           '<span class="card-badge">'+esc(n.type)+'</span>' +
-          '<button class="card-pin" onclick="pinNote(event,'+realIdx+')" title="Pin">'+pinIcon+'</button>' +
-          '<button class="card-reprocess" onclick="reprocessNote(event,'+realIdx+')" title="Re-procesar">↻</button>' +
-          '<button class="card-delete" onclick="deleteNote(event,'+realIdx+')" title="Eliminar">×</button>' +
+          (bulkMode ? '' :
+            '<button class="card-pin" onclick="pinNote(event,'+realIdx+')" title="Pin">'+pinIcon+'</button>' +
+            '<button class="card-reprocess" onclick="openEditModal(event,'+realIdx+')" title="Editar">✎</button>' +
+            '<button class="card-delete" onclick="deleteNote(event,'+realIdx+')" title="Eliminar">×</button>'
+          ) +
         '</div></div>' +
       (dateStr ? '<div class="card-date">'+dateStr+'</div>' : '') +
       '<div class="card-summary">'+esc(n.summary||'')+'</div>' +
       '<div class="card-footer"><div class="card-tags">'+tags+'</div>' +
-      '<a href="'+n.url+'" target="_blank" class="card-ext-link" onclick="event.stopPropagation()">Notion →</a></div>' +
+      (bulkMode ? '' : '<a href="'+n.url+'" target="_blank" class="card-ext-link" onclick="event.stopPropagation()">Notion →</a>') +
+      '</div>' +
       '</div>';
   });
   html += '</div>';
@@ -1103,6 +1207,115 @@ function addMsg(role, html) {
 function esc(str) {
   if (!str) return '';
   return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── BULK SELECT ──────────────────────────────────────────────────────────────
+var bulkMode     = false;
+var bulkSelected = {};
+
+function toggleBulkMode() {
+  bulkMode     = !bulkMode;
+  bulkSelected = {};
+  var btn = document.getElementById('bulk-toggle');
+  var bar = document.getElementById('bulk-bar');
+  btn.classList.toggle('on', bulkMode);
+  btn.textContent = bulkMode ? '✕ Salir' : '☐ Seleccionar';
+  bar.classList.toggle('visible', bulkMode);
+  renderHistory();
+}
+
+function toggleBulkCard(e, pageId) {
+  e.stopPropagation();
+  if (!bulkMode) return;
+  bulkSelected[pageId] = !bulkSelected[pageId];
+  var count = Object.values(bulkSelected).filter(Boolean).length;
+  document.getElementById('bulk-count').textContent = count + ' seleccionada' + (count !== 1 ? 's' : '');
+  renderHistory();
+}
+
+async function bulkDelete() {
+  var ids = Object.keys(bulkSelected).filter(function(id){ return bulkSelected[id]; });
+  if (!ids.length) return;
+  if (!confirm('¿Eliminar ' + ids.length + ' nota(s) de Notion y del historial?')) return;
+  var bar = document.getElementById('bulk-bar');
+  bar.querySelector('.btn-danger').disabled = true;
+  bar.querySelector('.btn-danger').textContent = '⏳ Eliminando...';
+  for (var i = 0; i < ids.length; i++) {
+    var pageId = ids[i];
+    try {
+      await fetch('/delete-notion', {
+        method: 'POST', headers: authHeaders(),
+        body: JSON.stringify({ page_id: pageId })
+      });
+    } catch(e) {}
+    notes = notes.filter(function(n){ return n.page_id !== pageId; });
+  }
+  try { localStorage.setItem('sf_notes', JSON.stringify(notes)); } catch(e) {}
+  toggleBulkMode();
+}
+
+// ── EDIT MODAL ───────────────────────────────────────────────────────────────
+var editingIndex = -1;
+
+function openEditModal(e, idx) {
+  e.stopPropagation();
+  editingIndex = idx;
+  var n = notes[idx];
+  document.getElementById('edit-title').value = n.title  || '';
+  document.getElementById('edit-body').value  = n.content || '';
+  var st = document.getElementById('edit-status');
+  st.style.display = 'none'; st.textContent = '';
+  document.getElementById('edit-save-btn').disabled = false;
+  document.getElementById('edit-save-btn').textContent = '⚡ Re-procesar y guardar';
+  document.getElementById('edit-modal').classList.add('visible');
+}
+
+function closeEditModal(e) {
+  if (e && e.target !== document.getElementById('edit-modal')) return;
+  document.getElementById('edit-modal').classList.remove('visible');
+  editingIndex = -1;
+}
+
+async function saveEditedNote() {
+  var title   = document.getElementById('edit-title').value.trim();
+  var body    = document.getElementById('edit-body').value.trim();
+  var saveBtn = document.getElementById('edit-save-btn');
+  var st      = document.getElementById('edit-status');
+  if (!title && !body) return;
+  var content = title ? ('# ' + title + '\n\n' + body) : body;
+  saveBtn.disabled = true;
+  saveBtn.innerHTML = '<span class="spin"></span> Procesando...';
+  st.style.display = 'none';
+  try {
+    var res = await fetch('/reprocess', {
+      method: 'POST', headers: authHeaders(),
+      body: JSON.stringify({ content: content })
+    });
+    if (res.status === 401) { doLogout(); return; }
+    var data = await res.json();
+    if (data.error) throw new Error(data.error);
+    data.content = content;
+    data.date    = new Date().toISOString();
+    data.pinned  = notes[editingIndex] ? notes[editingIndex].pinned : false;
+    if (editingIndex >= 0) notes[editingIndex] = data;
+    try { localStorage.setItem('sf_notes', JSON.stringify(notes)); } catch(e) {}
+    st.style.display = 'block';
+    st.style.background = 'rgba(74,222,128,0.07)';
+    st.style.border     = '1px solid rgba(74,222,128,0.2)';
+    st.style.color      = 'var(--green)';
+    st.textContent      = '✓ Guardado en Notion';
+    saveBtn.textContent = '✓ Guardado';
+    renderHistory();
+    setTimeout(function(){ closeEditModal({}); }, 1200);
+  } catch(err) {
+    st.style.display = 'block';
+    st.style.background = 'rgba(248,113,113,0.07)';
+    st.style.border     = '1px solid rgba(248,113,113,0.2)';
+    st.style.color      = 'var(--red)';
+    st.textContent      = '✗ ' + err.message;
+    saveBtn.disabled    = false;
+    saveBtn.textContent = '⚡ Re-procesar y guardar';
+  }
 }
 
 // ── BOOT ─────────────────────────────────────────────────────────────────────
