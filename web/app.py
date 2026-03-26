@@ -1,6 +1,10 @@
 import sys
 import os
 import secrets
+import logging
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -9,6 +13,9 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 app = FastAPI()
+
+# ── Config ────────────────────────────────────────────────────────────────────
+NOTION_DB_ID = os.getenv("NOTION_DB_ID", "32d95c1828928086a307fcf471e4ffc3")
 
 # ── Auth ─────────────────────────────────────────────────────────────────────
 APP_PASSWORD = os.getenv("APP_PASSWORD", "")
@@ -100,6 +107,78 @@ async def delete_notion(request: Request, token: str = Depends(verify_token)):
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
 
+@app.post("/set-reminder")
+async def set_reminder(request: Request, token: str = Depends(verify_token)):
+    try:
+        from notion_client import Client
+        body = await request.json()
+        page_id = body.get("page_id", "")
+        date_str = body.get("date", "")  # ISO date string "YYYY-MM-DD" or "" to clear
+        if not page_id:
+            return JSONResponse({"error": "No page_id"}, status_code=400)
+        logger.info(f"set-reminder: page_id={page_id}, date={date_str!r}")
+        notion = Client(auth=os.getenv("NOTION_TOKEN"))
+        if date_str:
+            result = notion.pages.update(
+                page_id=page_id,
+                properties={"Reminder": {"date": {"start": date_str}}}
+            )
+        else:
+            result = notion.pages.update(
+                page_id=page_id,
+                properties={"Reminder": {"date": None}}
+            )
+        logger.info(f"set-reminder OK: {result.get('id', '?')}")
+        return JSONResponse({"ok": True})
+    except Exception as e:
+        logger.error(f"set-reminder ERROR: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.get("/reminders")
+async def get_reminders(token: str = Depends(verify_token)):
+    try:
+        from notion_client import Client
+        from datetime import date
+        notion = Client(auth=os.getenv("NOTION_TOKEN"))
+        today = date.today().isoformat()
+        logger.info(f"get_reminders: querying DB={NOTION_DB_ID}, today={today}")
+
+        resp = notion.databases.query(
+            database_id=NOTION_DB_ID,
+            filter={
+                "property": "Reminder",
+                "date": {"is_not_empty": True}
+            },
+            sorts=[{"property": "Reminder", "direction": "ascending"}],
+            page_size=50,
+        )
+
+        reminders = []
+        for page in resp.get("results", []):
+            props = page.get("properties", {})
+            title_prop = props.get("Name", {}).get("title", [])
+            title = title_prop[0]["plain_text"] if title_prop else "Sin título"
+            reminder_prop = props.get("Reminder", {}).get("date")
+            reminder_date = reminder_prop["start"] if reminder_prop else None
+            if not reminder_date:
+                continue
+            is_overdue = reminder_date < today
+            is_today = reminder_date == today
+            reminders.append({
+                "page_id": page["id"],
+                "title": title,
+                "url": page.get("url", ""),
+                "reminder_date": reminder_date,
+                "is_overdue": is_overdue,
+                "is_today": is_today,
+            })
+
+        logger.info(f"get_reminders: found {len(reminders)} reminders")
+        return JSONResponse({"reminders": reminders})
+    except Exception as e:
+        logger.error(f"get_reminders ERROR: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
 @app.post("/reprocess")
 async def reprocess(request: Request, token: str = Depends(verify_token)):
     try:
@@ -112,7 +191,6 @@ async def reprocess(request: Request, token: str = Depends(verify_token)):
         return JSONResponse({"error": str(e)}, status_code=500)
 
 # ── Notion Sync ───────────────────────────────────────────────────────────────
-NOTION_DB_ID = "32d95c1828928086a307fcf471e4ffc3"
 
 @app.get("/notes")
 async def get_notes(token: str = Depends(verify_token)):
@@ -174,20 +252,25 @@ async def get_notes(token: str = Depends(verify_token)):
             # Date (created_time)
             created = page.get("created_time", "")
 
+            # Reminder (date)
+            reminder_prop = props.get("Reminder", {}).get("date")
+            reminder_date = reminder_prop["start"] if reminder_prop else None
+
             # Notion URL
             url = page.get("url", "")
 
             notes.append({
-                "title":    title,
-                "type":     note_type,
-                "tags":     tags,
-                "summary":  summary,
-                "insights": insights,
-                "actions":  actions,
-                "status":   status,
-                "date":     created,
-                "url":      url,
-                "page_id":  page["id"],
+                "title":         title,
+                "type":          note_type,
+                "tags":          tags,
+                "summary":       summary,
+                "insights":      insights,
+                "actions":       actions,
+                "status":        status,
+                "date":          created,
+                "url":           url,
+                "page_id":       page["id"],
+                "reminder_date": reminder_date,
             })
 
         return JSONResponse({"notes": notes})
