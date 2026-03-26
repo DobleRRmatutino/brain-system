@@ -1470,9 +1470,11 @@ async function saveReminder() {
     document.getElementById('reminder-modal').classList.remove('visible');
     reminderIndex = -1;
     renderHistory();
+    // Siempre refrescar el panel de recordatorios (estés en Stats o no)
+    renderReminders();
     if (document.getElementById('view-stats').classList.contains('active')) renderStats();
   } catch(err) {
-    alert('Error: ' + err.message);
+    alert('⚠ Error al guardar recordatorio:\n' + err.message);
     btn.disabled = false; btn.textContent = 'Guardar';
   }
 }
@@ -1482,18 +1484,22 @@ async function clearReminder() {
   btn.disabled = true;
   var n = notes[reminderIndex];
   try {
-    await fetch('/set-reminder', {
+    var res = await fetch('/set-reminder', {
       method: 'POST', headers: authHeaders(),
       body: JSON.stringify({ page_id: n.page_id, date: '' })
     });
+    if (res.status === 401) { doLogout(); return; }
+    var data = await res.json();
+    if (data.error) throw new Error(data.error);
     notes[reminderIndex].reminder_date = null;
     try { localStorage.setItem('sf_notes', JSON.stringify(notes)); } catch(e) {}
     document.getElementById('reminder-modal').classList.remove('visible');
     reminderIndex = -1;
     renderHistory();
+    renderReminders();
     if (document.getElementById('view-stats').classList.contains('active')) renderStats();
   } catch(err) {
-    alert('Error: ' + err.message);
+    alert('⚠ Error al quitar recordatorio:\n' + err.message);
   }
   btn.disabled = false;
 }
@@ -1505,6 +1511,13 @@ async function renderReminders() {
     var res = await fetch('/reminders', { method: 'GET', headers: authHeaders() });
     if (res.status === 401) { doLogout(); return; }
     var data = await res.json();
+
+    // Mostrar error explícito si Notion falla (ej: property "Reminder" no existe)
+    if (data.error) {
+      c.innerHTML = '<div style="font-size:11px;color:var(--red);padding:8px 12px;background:rgba(248,113,113,0.07);border:1px solid rgba(248,113,113,0.2);border-radius:6px;max-width:1080px;margin-bottom:20px">⚠ Error al cargar recordatorios: ' + esc(data.error) + '<br><span style="color:var(--text3);margin-top:4px;display:block">Verifica que la property <b style="color:var(--text2)">Reminder</b> exista en tu base de datos de Notion (tipo: Date, nombre exacto con R mayúscula).</span></div>';
+      return;
+    }
+
     var reminders = data.reminders || [];
     if (!reminders.length) { c.innerHTML = ''; return; }
     var html = '<div class="reminder-panel">' +
@@ -1525,23 +1538,27 @@ async function renderReminders() {
     html += '</div>';
     c.innerHTML = html;
   } catch(e) {
-    c.innerHTML = '';
+    c.innerHTML = '<div style="font-size:11px;color:var(--red);padding:8px 0">⚠ Error de red al cargar recordatorios: ' + esc(e.message) + '</div>';
   }
 }
 
 async function clearReminderById(pageId, btn) {
   btn.disabled = true;
   try {
-    await fetch('/set-reminder', {
+    var res = await fetch('/set-reminder', {
       method: 'POST', headers: authHeaders(),
       body: JSON.stringify({ page_id: pageId, date: '' })
     });
+    if (res.status === 401) { doLogout(); return; }
+    var data = await res.json();
+    if (data.error) throw new Error(data.error);
     // Update local notes array
     notes.forEach(function(n){ if (n.page_id === pageId) n.reminder_date = null; });
     try { localStorage.setItem('sf_notes', JSON.stringify(notes)); } catch(e) {}
     renderReminders();
     renderHistory();
   } catch(e) {
+    alert('⚠ Error al quitar recordatorio:\n' + e.message);
     btn.disabled = false;
   }
 }

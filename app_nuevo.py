@@ -1,6 +1,10 @@
 import sys
 import os
 import secrets
+import logging
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -9,6 +13,9 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 app = FastAPI()
+
+# ── Config ────────────────────────────────────────────────────────────────────
+NOTION_DB_ID = os.getenv("NOTION_DB_ID", "32d95c1828928086a307fcf471e4ffc3")
 
 # ── Auth ─────────────────────────────────────────────────────────────────────
 APP_PASSWORD = os.getenv("APP_PASSWORD", "")
@@ -109,19 +116,22 @@ async def set_reminder(request: Request, token: str = Depends(verify_token)):
         date_str = body.get("date", "")  # ISO date string "YYYY-MM-DD" or "" to clear
         if not page_id:
             return JSONResponse({"error": "No page_id"}, status_code=400)
+        logger.info(f"set-reminder: page_id={page_id}, date={date_str!r}")
         notion = Client(auth=os.getenv("NOTION_TOKEN"))
         if date_str:
-            notion.pages.update(
+            result = notion.pages.update(
                 page_id=page_id,
                 properties={"Reminder": {"date": {"start": date_str}}}
             )
         else:
-            notion.pages.update(
+            result = notion.pages.update(
                 page_id=page_id,
                 properties={"Reminder": {"date": None}}
             )
+        logger.info(f"set-reminder OK: {result.get('id', '?')}")
         return JSONResponse({"ok": True})
     except Exception as e:
+        logger.error(f"set-reminder ERROR: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)
 
 @app.get("/reminders")
@@ -131,6 +141,7 @@ async def get_reminders(token: str = Depends(verify_token)):
         from datetime import date
         notion = Client(auth=os.getenv("NOTION_TOKEN"))
         today = date.today().isoformat()
+        logger.info(f"get_reminders: querying DB={NOTION_DB_ID}, today={today}")
 
         resp = notion.databases.query(
             database_id=NOTION_DB_ID,
@@ -162,8 +173,10 @@ async def get_reminders(token: str = Depends(verify_token)):
                 "is_today": is_today,
             })
 
+        logger.info(f"get_reminders: found {len(reminders)} reminders")
         return JSONResponse({"reminders": reminders})
     except Exception as e:
+        logger.error(f"get_reminders ERROR: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)
 
 @app.post("/reprocess")
@@ -178,7 +191,6 @@ async def reprocess(request: Request, token: str = Depends(verify_token)):
         return JSONResponse({"error": str(e)}, status_code=500)
 
 # ── Notion Sync ───────────────────────────────────────────────────────────────
-NOTION_DB_ID = "32d95c1828928086a307fcf471e4ffc3"
 
 @app.get("/notes")
 async def get_notes(token: str = Depends(verify_token)):
