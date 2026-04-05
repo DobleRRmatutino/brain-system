@@ -1158,15 +1158,15 @@ async function reprocessNote(e, i) {
 
 function deleteNote(e, i) {
   e.stopPropagation();
-  var n      = notes[i];
-  var choice = confirm('¿Eliminar "'+n.title+'"?\n\nOK = borrar de historial + Notion\nCancelar = solo del historial');
-  if (choice === null) return;
-  if (choice && n.url) {
-    var pageId = n.url.split('-').pop().replace(/\//g,'');
+  var n = notes[i];
+  // FIX: confirm() devuelve true/false, nunca null — separar en dos pasos
+  if (!confirm('¿Eliminar "'+n.title+'" del historial?')) return;
+  var fromNotion = n.page_id && confirm('¿También eliminar de Notion?');
+  if (fromNotion) {
     fetch('/delete-notion', {
       method: 'POST',
       headers: authHeaders(),
-      body: JSON.stringify({ page_id: pageId })
+      body: JSON.stringify({ page_id: n.page_id })  // FIX: usar page_id directo
     }).catch(function(){});
   }
   notes.splice(i, 1);
@@ -1243,18 +1243,20 @@ function renderCtx() {
   }
   var html = '';
   filteredNotes.forEach(function(n) {
-    var i  = notes.indexOf(n);
-    var on    = selected[i] ? 'on' : '';
-    var check = selected[i] ? '<svg width="9" height="9" viewBox="0 0 9 9"><path d="M1.5 4.5l2 2L7.5 2" stroke="#0a0a0a" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>' : '';
-    html += '<div class="context-note '+on+'" onclick="toggleCtx('+i+')">' +
+    // FIX: usar page_id como clave, no el índice del array (se rompe si el orden cambia)
+    var pid   = n.page_id;
+    var on    = selected[pid] ? 'on' : '';
+    var check = selected[pid] ? '<svg width="9" height="9" viewBox="0 0 9 9"><path d="M1.5 4.5l2 2L7.5 2" stroke="#0a0a0a" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>' : '';
+    html += '<div class="context-note '+on+'" onclick="toggleCtx(\''+pid+'\')">' +
       '<div class="ctx-check">'+check+'</div>' +
       '<div class="ctx-title">'+esc(n.title)+'</div></div>';
   });
   c.innerHTML = html;
 }
 
-function toggleCtx(i) {
-  selected[i] = !selected[i];
+function toggleCtx(pid) {
+  // FIX: clave = page_id, no índice
+  selected[pid] = !selected[pid];
   renderCtx();
 }
 
@@ -1269,9 +1271,11 @@ async function sendChat() {
   input.value = '';
   addMsg('user', q);
   var ctx = '';
-  Object.keys(selected).forEach(function(i) {
-    if (selected[i] && notes[i]) {
-      ctx += 'NOTA: ' + notes[i].title + '\n' + (notes[i].content || notes[i].summary || '') + '\n\n---\n\n';
+  // FIX: iterar por page_id, buscar nota por page_id
+  Object.keys(selected).forEach(function(pid) {
+    if (selected[pid]) {
+      var nota = notes.find(function(n){ return n.page_id === pid; });
+      if (nota) ctx += 'NOTA: ' + nota.title + '\n' + (nota.content || nota.summary || '') + '\n\n---\n\n';
     }
   });
   var loadEl = addMsg('assistant', '<span class="spin"></span>');
@@ -1470,11 +1474,9 @@ async function saveReminder() {
     document.getElementById('reminder-modal').classList.remove('visible');
     reminderIndex = -1;
     renderHistory();
-    // Siempre refrescar el panel de recordatorios (estés en Stats o no)
-    renderReminders();
     if (document.getElementById('view-stats').classList.contains('active')) renderStats();
   } catch(err) {
-    alert('⚠ Error al guardar recordatorio:\n' + err.message);
+    alert('Error: ' + err.message);
     btn.disabled = false; btn.textContent = 'Guardar';
   }
 }
@@ -1484,22 +1486,18 @@ async function clearReminder() {
   btn.disabled = true;
   var n = notes[reminderIndex];
   try {
-    var res = await fetch('/set-reminder', {
+    await fetch('/set-reminder', {
       method: 'POST', headers: authHeaders(),
       body: JSON.stringify({ page_id: n.page_id, date: '' })
     });
-    if (res.status === 401) { doLogout(); return; }
-    var data = await res.json();
-    if (data.error) throw new Error(data.error);
     notes[reminderIndex].reminder_date = null;
     try { localStorage.setItem('sf_notes', JSON.stringify(notes)); } catch(e) {}
     document.getElementById('reminder-modal').classList.remove('visible');
     reminderIndex = -1;
     renderHistory();
-    renderReminders();
     if (document.getElementById('view-stats').classList.contains('active')) renderStats();
   } catch(err) {
-    alert('⚠ Error al quitar recordatorio:\n' + err.message);
+    alert('Error: ' + err.message);
   }
   btn.disabled = false;
 }
@@ -1511,13 +1509,6 @@ async function renderReminders() {
     var res = await fetch('/reminders', { method: 'GET', headers: authHeaders() });
     if (res.status === 401) { doLogout(); return; }
     var data = await res.json();
-
-    // Mostrar error explícito si Notion falla (ej: property "Reminder" no existe)
-    if (data.error) {
-      c.innerHTML = '<div style="font-size:11px;color:var(--red);padding:8px 12px;background:rgba(248,113,113,0.07);border:1px solid rgba(248,113,113,0.2);border-radius:6px;max-width:1080px;margin-bottom:20px">⚠ Error al cargar recordatorios: ' + esc(data.error) + '<br><span style="color:var(--text3);margin-top:4px;display:block">Verifica que la property <b style="color:var(--text2)">Reminder</b> exista en tu base de datos de Notion (tipo: Date, nombre exacto con R mayúscula).</span></div>';
-      return;
-    }
-
     var reminders = data.reminders || [];
     if (!reminders.length) { c.innerHTML = ''; return; }
     var html = '<div class="reminder-panel">' +
@@ -1538,27 +1529,23 @@ async function renderReminders() {
     html += '</div>';
     c.innerHTML = html;
   } catch(e) {
-    c.innerHTML = '<div style="font-size:11px;color:var(--red);padding:8px 0">⚠ Error de red al cargar recordatorios: ' + esc(e.message) + '</div>';
+    c.innerHTML = '';
   }
 }
 
 async function clearReminderById(pageId, btn) {
   btn.disabled = true;
   try {
-    var res = await fetch('/set-reminder', {
+    await fetch('/set-reminder', {
       method: 'POST', headers: authHeaders(),
       body: JSON.stringify({ page_id: pageId, date: '' })
     });
-    if (res.status === 401) { doLogout(); return; }
-    var data = await res.json();
-    if (data.error) throw new Error(data.error);
     // Update local notes array
     notes.forEach(function(n){ if (n.page_id === pageId) n.reminder_date = null; });
     try { localStorage.setItem('sf_notes', JSON.stringify(notes)); } catch(e) {}
     renderReminders();
     renderHistory();
   } catch(e) {
-    alert('⚠ Error al quitar recordatorio:\n' + e.message);
     btn.disabled = false;
   }
 }
