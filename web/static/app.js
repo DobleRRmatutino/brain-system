@@ -247,9 +247,8 @@ async function processNote() {
       body: JSON.stringify({ content: content })
     });
     if (res.status === 401) { doLogout(); return; }
+    if (res.status === 429) { setStatus('error', '⏳ Demasiadas solicitudes. Espera un momento.'); btn.disabled = false; btn.textContent = '⚡ Procesar'; return; }
     var data = await res.json();
-    if (data.error) throw new Error(data.error);
-    setStatus('success', '✓ Guardado en Notion');
     document.getElementById('result-info').style.display = 'flex';
     document.getElementById('res-title').textContent   = data.title   || '—';
     document.getElementById('res-type').textContent    = data.type    || '—';
@@ -378,22 +377,80 @@ async function reprocessNote(e, i) {
   }
 }
 
+// ── DELETE MODAL ──────────────────────────────────────────────────────────────
+var _pendingDelete = null;
+
 function deleteNote(e, i) {
   e.stopPropagation();
+  _pendingDelete = i;
   var n = notes[i];
-  // FIX: confirm() devuelve true/false, nunca null — separar en dos pasos
-  if (!confirm('¿Eliminar "'+n.title+'" del historial?')) return;
-  var fromNotion = n.page_id && confirm('¿También eliminar de Notion?');
-  if (fromNotion) {
+  showDeleteModal(n.title);
+}
+
+function showDeleteModal(title) {
+  // Reutilizar el modal existente como modal de confirmación
+  document.getElementById('edit-title').value = '';
+  document.getElementById('edit-body').value  = '';
+  var st = document.getElementById('edit-status');
+  st.style.display    = 'block';
+  st.style.background = 'rgba(248,113,113,0.07)';
+  st.style.border     = '1px solid rgba(248,113,113,0.2)';
+  st.style.color      = 'var(--red)';
+  st.textContent      = '¿Eliminar "' + title + '"?';
+  var saveBtn = document.getElementById('edit-save-btn');
+  saveBtn.textContent = '🗑 Solo del historial';
+  saveBtn.onclick     = confirmDeleteLocal;
+  // Agregar botón "También de Notion" dinámicamente
+  var notionBtn = document.getElementById('delete-notion-btn');
+  if (!notionBtn) {
+    notionBtn = document.createElement('button');
+    notionBtn.id        = 'delete-notion-btn';
+    notionBtn.className = 'btn btn-danger';
+    notionBtn.textContent = '🗑 Historial + Notion';
+    document.querySelector('.modal-footer').insertBefore(notionBtn, saveBtn);
+  }
+  notionBtn.style.display = 'inline-block';
+  notionBtn.onclick = confirmDeleteNotion;
+  document.querySelector('.modal-title').textContent = 'Eliminar nota';
+  document.getElementById('edit-modal').classList.add('visible');
+}
+
+function confirmDeleteLocal() {
+  if (_pendingDelete === null) return;
+  notes.splice(_pendingDelete, 1);
+  try { localStorage.setItem('sf_notes', JSON.stringify(notes)); } catch(e){}
+  _pendingDelete = null;
+  closeDeleteModal();
+  renderHistory();
+}
+
+function confirmDeleteNotion() {
+  if (_pendingDelete === null) return;
+  var n = notes[_pendingDelete];
+  if (n.page_id) {
     fetch('/delete-notion', {
-      method: 'POST',
-      headers: authHeaders(),
-      body: JSON.stringify({ page_id: n.page_id })  // FIX: usar page_id directo
+      method: 'POST', headers: authHeaders(),
+      body: JSON.stringify({ page_id: n.page_id })
     }).catch(function(){});
   }
-  notes.splice(i, 1);
+  notes.splice(_pendingDelete, 1);
   try { localStorage.setItem('sf_notes', JSON.stringify(notes)); } catch(e){}
+  _pendingDelete = null;
+  closeDeleteModal();
   renderHistory();
+}
+
+function closeDeleteModal() {
+  // Restaurar modal a su estado de edición
+  document.querySelector('.modal-title').textContent = 'Editar nota';
+  var notionBtn = document.getElementById('delete-notion-btn');
+  if (notionBtn) notionBtn.style.display = 'none';
+  var st = document.getElementById('edit-status');
+  st.style.display = 'none';
+  var saveBtn = document.getElementById('edit-save-btn');
+  saveBtn.textContent = '⚡ Re-procesar y guardar';
+  saveBtn.onclick     = saveEditedNote;
+  document.getElementById('edit-modal').classList.remove('visible');
 }
 
 // ── STATS ────────────────────────────────────────────────────────────────────
@@ -605,6 +662,8 @@ function openEditModal(e, idx) {
 
 function closeEditModal(e) {
   if (e && e.target !== document.getElementById('edit-modal')) return;
+  // Si estaba en modo delete, limpiar estado
+  if (_pendingDelete !== null) { closeDeleteModal(); return; }
   document.getElementById('edit-modal').classList.remove('visible');
   editingIndex = -1;
 }

@@ -2,7 +2,9 @@ import sys
 import os
 import secrets
 import logging
+import time
 from datetime import date
+from collections import defaultdict
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -28,6 +30,20 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(message)s",
 )
 logger = logging.getLogger(__name__)
+
+# ── Rate limiter (máx 10 requests de Gemini por minuto por token) ─────────────
+_rate_buckets: dict = defaultdict(list)
+RATE_LIMIT     = 10   # requests
+RATE_WINDOW    = 60   # segundos
+
+def check_rate_limit(token: str):
+    now = time.time()
+    bucket = _rate_buckets[token]
+    # Limpiar entradas fuera de la ventana
+    _rate_buckets[token] = [t for t in bucket if now - t < RATE_WINDOW]
+    if len(_rate_buckets[token]) >= RATE_LIMIT:
+        raise HTTPException(status_code=429, detail="Demasiadas solicitudes. Espera un momento.")
+    _rate_buckets[token].append(now)
 
 # ── App ───────────────────────────────────────────────────────────────────────
 app = FastAPI()
@@ -75,6 +91,7 @@ async def home():
 @app.post("/process")
 async def handle(request: Request, token: str = Depends(verify_token)):
     try:
+        check_rate_limit(token)
         body    = await request.json()
         content = body.get("content", "")
         result  = gemini_process(content)           # FIX: import al inicio
@@ -86,6 +103,7 @@ async def handle(request: Request, token: str = Depends(verify_token)):
 @app.post("/reprocess")
 async def reprocess(request: Request, token: str = Depends(verify_token)):
     try:
+        check_rate_limit(token)
         body    = await request.json()
         content = body.get("content", "")
         result  = gemini_process(content)           # FIX: import al inicio
