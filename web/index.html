@@ -235,35 +235,42 @@
 
         <!-- Con Google conectado -->
         <div id="inbox-content" style="display:none">
-          <div class="inbox-layout">
 
-            <!-- Gmail -->
-            <div class="inbox-col">
-              <div class="panel" style="height:100%">
-                <div class="panel-header" style="justify-content:space-between">
-                  <span class="panel-label">📧 Gmail — Inbox</span>
-                  <button class="filter-btn" style="font-size:10px;padding:4px 8px" onclick="loadInbox()">⟳</button>
-                </div>
-                <div id="email-list" class="panel-body" style="padding:0;overflow-y:auto;max-height:calc(100vh - 200px)">
-                  <div class="inbox-loading">Cargando...</div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Calendar -->
-            <div class="inbox-col">
-              <div class="panel" style="height:100%">
-                <div class="panel-header" style="justify-content:space-between">
-                  <span class="panel-label">📅 Próximos eventos</span>
-                  <button class="filter-btn" style="font-size:10px;padding:4px 8px" onclick="loadCalendar()">⟳</button>
-                </div>
-                <div id="event-list" class="panel-body" style="padding:0;overflow-y:auto;max-height:calc(100vh - 200px)">
-                  <div class="inbox-loading">Cargando...</div>
-                </div>
-              </div>
-            </div>
-
+          <!-- Tabs -->
+          <div class="inbox-tabs">
+            <button class="inbox-tab active" id="tab-gmail" onclick="switchInboxTab('gmail')">Gmail</button>
+            <button class="inbox-tab" id="tab-calendar" onclick="switchInboxTab('calendar')">Calendar</button>
+            <button class="inbox-tab-refresh" onclick="loadInbox();loadCalendar()" title="Refresh">⟳</button>
           </div>
+
+          <!-- Gmail pane -->
+          <div class="inbox-pane active" id="pane-gmail">
+            <div class="gmail-2pane">
+              <div id="email-list" class="gmail-list">
+                <div class="inbox-loading"><span class="spin"></span> Cargando...</div>
+              </div>
+              <div id="email-preview" class="gmail-preview">
+                <div class="preview-empty">
+                  <div class="preview-empty-text">Selecciona un email</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Calendar pane -->
+          <div class="inbox-pane" id="pane-calendar">
+            <div class="cal-nav">
+              <button class="cal-nav-btn" onclick="calPrevWeek()">←</button>
+              <span class="cal-week-label" id="cal-week-label">—</span>
+              <button class="cal-nav-btn" onclick="calNextWeek()">→</button>
+              <button class="cal-nav-btn cal-today-btn" onclick="calGoToday()">Hoy</button>
+              <button class="cal-nav-btn" onclick="loadCalendar()" style="margin-left:auto">⟳</button>
+            </div>
+            <div id="event-list" class="cal-grid-wrap">
+              <div class="inbox-loading"><span class="spin"></span> Cargando...</div>
+            </div>
+          </div>
+
         </div>
 
       </div>

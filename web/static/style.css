@@ -1218,133 +1218,276 @@ body {
 /* ══════════════════════════════════════════════════════════
    VIEW: INBOX
 ══════════════════════════════════════════════════════════ */
-.inbox-layout {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 20px;
-  max-width: 1040px;
-  height: calc(100vh - 116px);
-}
-.inbox-col { display: flex; flex-direction: column; min-height: 0; }
 
-/* ── Gmail list (Superhuman-inspired + Nothing palette) ──── */
-.email-item {
-  display: flex;
-  flex-direction: column;
-  padding: 11px 20px;
+/* ── Tabs ──────────────────────────────────────────────── */
+.inbox-tabs {
+  display: flex; align-items: center;
   border-bottom: 1px solid var(--border);
-  text-decoration: none;
-  transition: background 120ms var(--ease);
+  flex-shrink: 0;
+}
+.inbox-tab {
+  padding: 11px 20px;
+  background: none; border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-disabled);
+  font-family: var(--font-mono); font-size: 10px;
+  letter-spacing: 0.1em; text-transform: uppercase;
+  cursor: pointer; margin-bottom: -1px;
+  transition: color 150ms var(--ease), border-color 150ms var(--ease);
+}
+.inbox-tab:hover { color: var(--text-secondary); }
+.inbox-tab.active { color: var(--text-display); border-bottom-color: var(--text-display); }
+.inbox-tab-refresh {
+  margin-left: auto;
+  padding: 8px 16px;
+  background: none; border: none;
+  color: var(--text-disabled); font-size: 15px;
+  cursor: pointer; transition: color 150ms var(--ease);
+  line-height: 1;
+}
+.inbox-tab-refresh:hover { color: var(--text-secondary); }
+
+/* ── Panes ─────────────────────────────────────────────── */
+.inbox-pane { display: none; height: calc(100vh - 52px - 43px); }
+.inbox-pane.active { display: flex; flex-direction: column; }
+
+/* ── Gmail 2-pane (Superhuman) ─────────────────────────── */
+.gmail-2pane {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  flex: 1;
+  overflow: hidden;
+}
+.gmail-list {
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+}
+.gmail-preview {
+  overflow-y: auto;
+  background: var(--bg);
+}
+
+/* Email row items */
+.email-item {
+  display: grid;
+  grid-template-columns: 40px 1fr auto;
+  grid-template-rows: auto auto;
+  column-gap: 10px;
+  row-gap: 1px;
+  align-items: center;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
   cursor: pointer;
-  position: relative;
+  transition: background 100ms var(--ease);
+  text-decoration: none;
 }
 .email-item:hover { background: var(--surface-raised); }
+.email-item.selected { background: var(--surface-raised); border-left: 2px solid var(--text-display); padding-left: 12px; }
 .email-item:last-child { border-bottom: none; }
 
-/* White left-bar accent for unread — the Nothing signal moment */
-.email-item.unread::before {
-  content: '';
-  position: absolute;
-  left: 0; top: 0; bottom: 0;
-  width: 2px;
-  background: var(--text-display);
+.email-avatar {
+  grid-row: 1 / 3; grid-column: 1;
+  width: 32px; height: 32px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-ui); font-size: 12px; font-weight: 600;
+  text-transform: uppercase;
+  flex-shrink: 0; position: relative; align-self: center;
+}
+.email-unread-dot {
+  position: absolute; top: 0; right: 0;
+  width: 8px; height: 8px;
+  border-radius: 50%; background: #4A8EF5;
+  border: 1.5px solid var(--bg);
 }
 
 .email-from {
-  font-family: var(--font-ui);
-  font-size: 13px;
-  font-weight: 400;
+  grid-row: 1; grid-column: 2;
+  font-family: var(--font-ui); font-size: 13px; font-weight: 400;
   color: var(--text-disabled);
-  margin-bottom: 2px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.email-item.unread .email-from {
-  font-weight: 500;
-  color: var(--text-display);
+.email-item.unread .email-from { font-weight: 600; color: var(--text-display); }
+
+.email-time-col {
+  grid-row: 1; grid-column: 3;
+  font-family: var(--font-mono); font-size: 10px;
+  color: var(--text-disabled); letter-spacing: 0.04em;
+  white-space: nowrap; flex-shrink: 0;
 }
 
 .email-subject {
-  font-family: var(--font-ui);
-  font-size: 13px;
-  color: var(--text-secondary);
-  margin-bottom: 3px;
+  grid-row: 2; grid-column: 2 / 4;
+  font-family: var(--font-ui); font-size: 12px;
+  color: var(--text-disabled);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.email-item.unread .email-subject {
-  color: var(--text-primary);
-  font-weight: 500;
-}
+.email-item.unread .email-subject { color: var(--text-secondary); font-weight: 500; }
 
-.email-snippet {
-  font-family: var(--font-ui);
-  font-size: 12px;
+/* Email preview panel */
+.preview-empty {
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  height: 100%; opacity: 0.4;
+}
+.preview-empty-text {
+  font-family: var(--font-mono); font-size: 10px;
+  letter-spacing: 0.1em; text-transform: uppercase;
   color: var(--text-disabled);
-  line-height: 1.5;
-  display: -webkit-box;
-  -webkit-line-clamp: 1;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
 }
-
-/* ── Calendar events ─────────────────────────────────────── */
-.event-item {
-  display: flex; gap: 16px;
-  padding: 11px 20px;
+.email-preview-panel {
+  padding: 28px 32px;
+  display: flex; flex-direction: column; height: 100%;
+}
+.preview-subject {
+  font-family: var(--font-ui); font-size: 20px;
+  font-weight: 300; color: var(--text-display);
+  letter-spacing: -0.02em; line-height: 1.3;
+  margin-bottom: 14px;
+}
+.preview-from {
+  font-family: var(--font-ui); font-size: 13px;
+  color: var(--text-secondary); margin-bottom: 4px;
+}
+.preview-date {
+  font-family: var(--font-mono); font-size: 10px;
+  color: var(--text-disabled); letter-spacing: 0.04em;
+  margin-bottom: 18px;
+  padding-bottom: 18px;
   border-bottom: 1px solid var(--border);
-  text-decoration: none;
-  transition: background 120ms var(--ease);
-  cursor: pointer;
 }
-.event-item:hover { background: var(--surface-raised); }
-.event-item:last-child { border-bottom: none; }
+.preview-body {
+  font-family: var(--font-ui); font-size: 13px;
+  color: var(--text-secondary); line-height: 1.8;
+  flex: 1; overflow-y: auto;
+  white-space: pre-wrap;
+}
+.preview-open-link {
+  display: inline-flex; align-items: center; gap: 6px;
+  margin-top: 20px;
+  font-family: var(--font-mono); font-size: 10px;
+  letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--text-disabled); text-decoration: none;
+  border: 1px solid var(--border-visible);
+  padding: 8px 16px; border-radius: 999px;
+  transition: all 150ms var(--ease); align-self: flex-start;
+}
+.preview-open-link:hover { color: var(--text-display); border-color: var(--text-disabled); }
 
-.event-date-col { flex-shrink: 0; width: 60px; }
-.event-date {
-  font-family: var(--font-mono);
-  font-size: 11px;
+/* ── Calendar week grid ────────────────────────────────── */
+.cal-nav {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.cal-nav-btn {
+  background: none; border: 1px solid var(--border-visible);
   color: var(--text-secondary);
-  margin-bottom: 2px;
-  letter-spacing: 0.04em;
+  font-family: var(--font-mono); font-size: 11px;
+  padding: 4px 10px; border-radius: 4px; cursor: pointer;
+  transition: all 150ms var(--ease); white-space: nowrap;
 }
-.event-time {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  color: var(--text-disabled);
-  letter-spacing: 0.04em;
+.cal-nav-btn:hover { border-color: var(--text-disabled); color: var(--text-display); }
+.cal-today-btn { border-color: transparent; }
+.cal-week-label {
+  font-family: var(--font-mono); font-size: 11px;
+  color: var(--text-secondary); letter-spacing: 0.06em;
 }
-.event-info { flex: 1; min-width: 0; }
-.event-title {
-  font-family: var(--font-ui);
-  font-size: 13px;
-  color: var(--text-primary);
-  margin-bottom: 3px;
+
+.cal-grid-wrap { flex: 1; overflow-y: auto; overflow-x: auto; display: flex; flex-direction: column; }
+
+.cal-grid-head {
+  display: flex; flex-shrink: 0;
+  position: sticky; top: 0; z-index: 3;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+.cal-gutter-head { width: 48px; flex-shrink: 0; border-right: 1px solid var(--border); }
+.cal-day-head {
+  flex: 1; padding: 7px 4px 8px; text-align: center;
+  font-family: var(--font-mono); font-size: 9px;
+  color: var(--text-disabled); letter-spacing: 0.1em; text-transform: uppercase;
+  border-right: 1px solid var(--border);
+  min-width: 64px;
+}
+.cal-day-head:last-child { border-right: none; }
+.cal-day-head-num {
+  display: block; font-size: 15px; font-weight: 300;
+  font-family: var(--font-ui); color: var(--text-secondary);
+  margin-top: 2px; line-height: 1;
+}
+.cal-day-head.today { color: var(--text-primary); }
+.cal-day-head.today .cal-day-head-num {
+  display: flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; border-radius: 50%;
+  background: var(--text-display); color: var(--bg);
+  font-size: 13px; font-weight: 500; margin: 2px auto 0;
+}
+
+.cal-grid-body { display: flex; flex: 1; min-width: 480px; }
+.cal-gutter { width: 48px; flex-shrink: 0; border-right: 1px solid var(--border); }
+.cal-time-label {
+  height: 56px; display: flex; align-items: flex-start;
+  justify-content: flex-end; padding: 3px 8px 0 0;
+  font-family: var(--font-mono); font-size: 9px;
+  color: var(--text-disabled); letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.cal-day-col {
+  flex: 1; position: relative;
+  border-right: 1px solid var(--border);
+  height: 784px; /* 14h × 56px */
+  min-width: 64px;
+}
+.cal-day-col:last-child { border-right: none; }
+.cal-day-col.today-col { background: rgba(255,255,255,0.018); }
+.cal-hour-bg { height: 56px; border-bottom: 1px solid var(--border); }
+
+.cal-event-block {
+  position: absolute; left: 2px; right: 2px;
+  border-radius: 3px; padding: 2px 5px;
+  font-family: var(--font-ui); font-size: 11px;
+  color: #fff; overflow: hidden; cursor: pointer;
+  z-index: 1; min-height: 20px; line-height: 1.3;
+  transition: filter 100ms var(--ease);
+}
+.cal-event-block:hover { filter: brightness(1.18); }
+.cal-event-block-title { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cal-event-block-time { font-size: 9px; opacity: 0.85; }
+
+.cal-event-allday {
+  position: absolute; left: 2px; right: 2px; top: 3px;
+  border-radius: 3px; padding: 2px 5px;
+  font-family: var(--font-ui); font-size: 10px; font-weight: 500;
+  color: #fff; cursor: pointer; z-index: 1;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.event-location {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  color: var(--text-disabled);
-  letter-spacing: 0.02em;
+
+.cal-now-line {
+  position: absolute; left: 0; right: 0; height: 1px;
+  background: var(--accent); z-index: 2;
+  pointer-events: none;
+}
+.cal-now-line::before {
+  content: ''; position: absolute; left: -3px; top: -3px;
+  width: 7px; height: 7px; border-radius: 50%; background: var(--accent);
 }
 
 /* ── Inbox states ────────────────────────────────────────── */
 .inbox-loading {
   padding: 20px;
-  font-family: var(--font-mono);
-  font-size: 10px;
-  color: var(--text-disabled);
-  letter-spacing: 0.08em;
+  font-family: var(--font-mono); font-size: 10px;
+  color: var(--text-disabled); letter-spacing: 0.08em;
   text-transform: uppercase;
   display: flex; align-items: center; gap: 8px;
 }
 .inbox-empty {
   padding: 40px 20px;
-  font-family: var(--font-mono);
-  font-size: 10px;
-  color: var(--text-disabled);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  text-align: center;
+  font-family: var(--font-mono); font-size: 10px;
+  color: var(--text-disabled); letter-spacing: 0.08em;
+  text-transform: uppercase; text-align: center;
 }
 
 /* ══════════════════════════════════════════════════════════
@@ -1354,8 +1497,10 @@ body {
   .note-grid    { grid-template-columns: 1fr; }
   .chat-layout  { grid-template-columns: 1fr; height: auto; }
   .chat-panel   { height: 280px; }
-  .inbox-layout { grid-template-columns: 1fr; height: auto; }
-  .inbox-col:last-child { height: 300px; }
+  .gmail-2pane { grid-template-columns: 1fr; }
+  .gmail-preview { display: none; }
+  .gmail-2pane.preview-open .gmail-list { display: none; }
+  .gmail-2pane.preview-open .gmail-preview { display: block; }
 }
 
 /* ══════════════════════════════════════════════════════════
@@ -1395,5 +1540,6 @@ body {
   .stats-grid { grid-template-columns: repeat(2, 1fr); }
   .stat-value { font-size: 28px; }
 
-  .inbox-layout { grid-template-columns: 1fr; gap: 14px; height: auto; }
+  .inbox-pane { height: calc(100vh - 52px - 43px - 20px); }
+  .gmail-2pane { grid-template-columns: 260px 1fr; }
 }
