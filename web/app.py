@@ -266,11 +266,7 @@ async def google_status(token: str = Depends(verify_token)):
     return JSONResponse({"connected": token in _google_tokens})
 
 @app.get("/auth/google")
-async def google_auth(request: Request):
-    qt = request.query_params.get("_token", "")
-    if not qt or qt not in _sessions:
-        raise HTTPException(status_code=401, detail="No autorizado")
-    token = qt
+async def google_auth(token: str = Depends(verify_token)):
     params = {
         "client_id":     GOOGLE_CLIENT_ID,
         "redirect_uri":  GOOGLE_REDIRECT_URI,

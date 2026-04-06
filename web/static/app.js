@@ -845,26 +845,6 @@ function connectGoogle() {
   );
 }
 
-// ── INBOX TAB SWITCHER ────────────────────────────────────────────────────────
-function switchInboxTab(tab) {
-  document.querySelectorAll('.inbox-tab').forEach(function(t){ t.classList.remove('active'); });
-  document.querySelectorAll('.inbox-pane').forEach(function(p){ p.classList.remove('active'); });
-  var tabEl = document.getElementById('tab-' + tab);
-  var paneEl = document.getElementById('pane-' + tab);
-  if (tabEl) tabEl.classList.add('active');
-  if (paneEl) paneEl.classList.add('active');
-}
-
-// ── GMAIL ─────────────────────────────────────────────────────────────────────
-var _inboxEmails = [];
-var _AVATAR_COLORS = ['#4A8EF5','#7C5CBF','#2D9B6E','#E07830','#D05575','#3BAECC','#9B6E2D'];
-
-function _avatarColor(name) {
-  var code = 0;
-  for (var i = 0; i < name.length; i++) code += name.charCodeAt(i);
-  return _AVATAR_COLORS[code % _AVATAR_COLORS.length];
-}
-
 async function loadInbox() {
   var el = document.getElementById('email-list');
   if (!el) return;
@@ -881,221 +861,30 @@ async function loadInbox() {
     }
     var data = await res.json();
     if (data.error) throw new Error(data.error);
-    var emails = data.emails || [];
-    _inboxEmails = emails;
-    var unread = emails.filter(function(e){ return e.unread; }).length;
+    var emails  = data.emails || [];
+    var unread  = emails.filter(function(e){ return e.unread; }).length;
+    // Actualizar badge
     var badge = document.getElementById('nav-unread');
     if (badge) {
       if (unread > 0) { badge.textContent = unread; badge.style.display = 'inline'; }
-      else { badge.style.display = 'none'; }
+      else            { badge.style.display = 'none'; }
     }
     if (!emails.length) {
       el.innerHTML = '<div class="inbox-empty">Inbox vacío 🎉</div>';
       return;
     }
     var html = '';
-    emails.forEach(function(email, idx) {
+    emails.forEach(function(email) {
       var fromShort = email.from.replace(/<[^>]+>/, '').trim() || email.from;
-      var initial = fromShort.charAt(0).toUpperCase();
-      var aColor = _avatarColor(fromShort);
-      var timeStr = '';
-      if (email.date) {
-        var d = new Date(email.date);
-        var now = new Date();
-        if (d.toDateString() === now.toDateString()) {
-          timeStr = d.toLocaleTimeString('es-PE', {hour:'2-digit', minute:'2-digit'});
-        } else {
-          timeStr = d.toLocaleDateString('es-PE', {day:'2-digit', month:'short'});
-        }
-      }
-      html += '<div class="email-item'+(email.unread?' unread':'')+'" onclick="showEmailPreview('+idx+')" id="email-row-'+idx+'">' +
-        '<div class="email-avatar" style="background:'+aColor+'22;color:'+aColor+'">'+esc(initial)+
-          (email.unread ? '<span class="email-unread-dot"></span>' : '') +
-        '</div>' +
+      html += '<a href="'+email.url+'" target="_blank" class="email-item'+(email.unread?' unread':'')+'">' +
         '<div class="email-from">'+esc(fromShort)+'</div>' +
-        '<div class="email-time-col">'+esc(timeStr)+'</div>' +
         '<div class="email-subject">'+esc(email.subject)+'</div>' +
-        '</div>';
+        '<div class="email-snippet">'+esc(email.snippet)+'</div>' +
+        '</a>';
     });
     el.innerHTML = html;
-    if (emails.length > 0) showEmailPreview(0);
   } catch(e) {
     el.innerHTML = '<div class="inbox-empty" style="color:var(--red)">Error: '+esc(e.message)+'</div>';
-  }
-}
-
-function showEmailPreview(idx) {
-  var email = _inboxEmails[idx];
-  if (!email) return;
-  // Mark selected row
-  document.querySelectorAll('.email-item').forEach(function(r){ r.classList.remove('selected'); });
-  var row = document.getElementById('email-row-' + idx);
-  if (row) row.classList.add('selected');
-
-  var fromShort = email.from.replace(/<[^>]+>/, '').trim() || email.from;
-  var dateStr = '';
-  if (email.date) {
-    dateStr = new Date(email.date).toLocaleString('es-PE', {
-      weekday:'short', day:'numeric', month:'short', hour:'2-digit', minute:'2-digit'
-    });
-  }
-
-  var el = document.getElementById('email-preview');
-  if (!el) return;
-  el.innerHTML = '<div class="email-preview-panel">' +
-    '<div class="preview-subject">'+esc(email.subject)+'</div>' +
-    '<div class="preview-from">De: '+esc(fromShort)+'</div>' +
-    '<div class="preview-date">'+esc(dateStr || '—')+'</div>' +
-    '<div class="preview-body">'+esc(email.snippet)+'</div>' +
-    '<a class="preview-open-link" href="'+email.url+'" target="_blank">' +
-      '<svg width="11" height="11" viewBox="0 0 16 16" fill="none"><path d="M6 3H3a1 1 0 00-1 1v9a1 1 0 001 1h9a1 1 0 001-1v-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M9 2h5v5M14 2L8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>' +
-      'Abrir en Gmail' +
-    '</a>' +
-    '</div>';
-  // Mobile: show preview panel
-  var pane = el.closest('.gmail-2pane');
-  if (pane) pane.classList.add('preview-open');
-}
-
-// ── CALENDAR WEEK GRID ────────────────────────────────────────────────────────
-var _calEvents = [];
-var _calWeekOffset = 0;
-var _CAL_COLORS = ['#4A8EF5','#7C5CBF','#2D9B6E','#E07830','#D05575','#3BAECC','#9B6E2D','#BF5C3A'];
-var _HOUR_START = 8;
-var _HOUR_END   = 22;
-var _HOUR_H     = 56;
-
-function calPrevWeek() { _calWeekOffset--; renderCalendarGrid(_calEvents); }
-function calNextWeek() { _calWeekOffset++; renderCalendarGrid(_calEvents); }
-function calGoToday()  { _calWeekOffset = 0; renderCalendarGrid(_calEvents); }
-
-function _weekStart(offset) {
-  var now = new Date();
-  var day = now.getDay();
-  var diff = day === 0 ? -6 : 1 - day;
-  var mon = new Date(now);
-  mon.setDate(now.getDate() + diff + offset * 7);
-  mon.setHours(0, 0, 0, 0);
-  return mon;
-}
-
-function renderCalendarGrid(events) {
-  var el = document.getElementById('event-list');
-  if (!el) return;
-
-  var DAY_LABELS = ['LUN','MAR','MIÉ','JUE','VIE','SÁB','DOM'];
-  var ws = _weekStart(_calWeekOffset);
-  var weekDays = [];
-  for (var i = 0; i < 7; i++) {
-    var d = new Date(ws);
-    d.setDate(ws.getDate() + i);
-    weekDays.push(d);
-  }
-
-  // Week label
-  var wl = document.getElementById('cal-week-label');
-  if (wl) {
-    var fmt = {day:'numeric', month:'short'};
-    wl.textContent = weekDays[0].toLocaleDateString('es-PE', fmt) +
-      ' – ' + weekDays[6].toLocaleDateString('es-PE', fmt);
-  }
-
-  var today = new Date(); today.setHours(0,0,0,0);
-  var wsEnd = new Date(ws.getTime() + 7 * 86400000);
-
-  // Filter events for this week
-  var weekEvents = events.filter(function(ev) {
-    if (!ev.start) return false;
-    var d = new Date(ev.start); d.setHours(0,0,0,0);
-    return d >= ws && d < wsEnd;
-  });
-
-  // Color by title hash
-  var colorIdx = {};
-  events.forEach(function(ev, i) {
-    if (!(ev.title in colorIdx)) colorIdx[ev.title] = i;
-  });
-
-  // Events per day
-  var dayEvents = weekDays.map(function(wd) {
-    return weekEvents.filter(function(ev) {
-      var d = new Date(ev.start); d.setHours(0,0,0,0);
-      return d.getTime() === wd.getTime();
-    });
-  });
-
-  // Build header
-  var headHtml = '<div class="cal-gutter-head"></div>';
-  weekDays.forEach(function(wd, i) {
-    var isToday = wd.getTime() === today.getTime();
-    headHtml += '<div class="cal-day-head' + (isToday?' today':'') + '">' +
-      DAY_LABELS[i] +
-      '<span class="cal-day-head-num">'+wd.getDate()+'</span>' +
-      '</div>';
-  });
-
-  // Build time gutter
-  var gutterHtml = '';
-  for (var h = _HOUR_START; h < _HOUR_END; h++) {
-    var lbl = h < 12 ? h+'am' : (h===12?'12pm':(h-12)+'pm');
-    gutterHtml += '<div class="cal-time-label">'+lbl+'</div>';
-  }
-
-  // Build day columns
-  var colsHtml = '';
-  weekDays.forEach(function(wd, di) {
-    var isToday = wd.getTime() === today.getTime();
-    colsHtml += '<div class="cal-day-col'+(isToday?' today-col':'') + '">';
-    // Hour background cells
-    for (var h = _HOUR_START; h < _HOUR_END; h++) {
-      colsHtml += '<div class="cal-hour-bg"></div>';
-    }
-    // Current time line
-    if (isToday) {
-      var now2 = new Date();
-      var nowH = now2.getHours() + now2.getMinutes()/60;
-      if (nowH >= _HOUR_START && nowH <= _HOUR_END) {
-        var nowTop = (nowH - _HOUR_START) * _HOUR_H;
-        colsHtml += '<div class="cal-now-line" style="top:'+nowTop+'px"></div>';
-      }
-    }
-    // Events
-    dayEvents[di].forEach(function(ev) {
-      var c = _CAL_COLORS[colorIdx[ev.title] % _CAL_COLORS.length];
-      if (ev.all_day) {
-        colsHtml += '<div class="cal-event-allday" style="background:'+c+'" onclick="window.open(\''+esc(ev.url)+'\',\'_blank\')">'+esc(ev.title)+'</div>';
-        return;
-      }
-      var startD = new Date(ev.start);
-      var endD   = ev.end ? new Date(ev.end) : new Date(startD.getTime() + 3600000);
-      var sh = startD.getHours() + startD.getMinutes()/60;
-      var eh = endD.getHours()   + endD.getMinutes()/60;
-      sh = Math.max(sh, _HOUR_START);
-      eh = Math.min(eh, _HOUR_END);
-      if (eh <= sh) return;
-      var top    = (sh - _HOUR_START) * _HOUR_H;
-      var height = Math.max((eh - sh) * _HOUR_H, 20);
-      var tStr   = startD.toLocaleTimeString('es-PE', {hour:'2-digit', minute:'2-digit'});
-      colsHtml += '<div class="cal-event-block" style="top:'+top+'px;height:'+height+'px;background:'+c+'" onclick="window.open(\''+esc(ev.url)+'\',\'_blank\')">' +
-        '<div class="cal-event-block-title">'+esc(ev.title)+'</div>' +
-        (height > 30 ? '<div class="cal-event-block-time">'+tStr+'</div>' : '') +
-        '</div>';
-    });
-    colsHtml += '</div>';
-  });
-
-  el.innerHTML =
-    '<div class="cal-grid-head">'+headHtml+'</div>' +
-    '<div class="cal-grid-body">' +
-      '<div class="cal-gutter">'+gutterHtml+'</div>' +
-      colsHtml +
-    '</div>';
-
-  // Scroll to current time
-  if (_calWeekOffset === 0) {
-    var now3 = new Date();
-    var scrollTop = Math.max(0, (now3.getHours() + now3.getMinutes()/60 - _HOUR_START - 1) * _HOUR_H);
-    el.scrollTop = scrollTop;
   }
 }
 
@@ -1112,8 +901,34 @@ async function loadCalendar() {
     }
     var data = await res.json();
     if (data.error) throw new Error(data.error);
-    _calEvents = data.events || [];
-    renderCalendarGrid(_calEvents);
+    var events = data.events || [];
+    if (!events.length) {
+      el.innerHTML = '<div class="inbox-empty">Sin eventos próximos</div>';
+      return;
+    }
+    var html = '';
+    events.forEach(function(ev) {
+      var startDate = ev.start ? new Date(ev.start) : null;
+      var dateStr   = '';
+      var timeStr   = '';
+      if (startDate) {
+        dateStr = startDate.toLocaleDateString('es-PE', {weekday:'short',day:'2-digit',month:'short'});
+        if (!ev.all_day) {
+          timeStr = startDate.toLocaleTimeString('es-PE', {hour:'2-digit',minute:'2-digit'});
+        }
+      }
+      html += '<a href="'+ev.url+'" target="_blank" class="event-item">' +
+        '<div class="event-date-col">' +
+          '<div class="event-date">'+dateStr+'</div>' +
+          (timeStr ? '<div class="event-time">'+timeStr+'</div>' : '<div class="event-time">Todo el día</div>') +
+        '</div>' +
+        '<div class="event-info">' +
+          '<div class="event-title">'+esc(ev.title)+'</div>' +
+          (ev.location ? '<div class="event-location">📍 '+esc(ev.location)+'</div>' : '') +
+        '</div>' +
+        '</a>';
+    });
+    el.innerHTML = html;
   } catch(e) {
     el.innerHTML = '<div class="inbox-empty" style="color:var(--red)">Error: '+esc(e.message)+'</div>';
   }
