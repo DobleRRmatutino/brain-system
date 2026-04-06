@@ -40,10 +40,7 @@ async function doLogin() {
 
 async function doLogout() {
   try {
-    await fetch('/logout', {
-      method: 'POST',
-      headers: authHeaders()
-    });
+    await fetch('/logout', { method: 'POST', headers: authHeaders() });
   } catch(e) {}
   authToken = null;
   localStorage.removeItem('brain_token');
@@ -86,8 +83,13 @@ var currentFilter = 'all';
 
 function initApp() {
   try { notes = JSON.parse(localStorage.getItem('sf_notes') || '[]'); } catch(e) { notes = []; }
-  // Auto-sync desde Notion al iniciar (silencioso, en background)
   syncFromNotion(true);
+  // Escuchar postMessage de OAuth popup
+  window.addEventListener('message', function(e) {
+    if (e.data === 'google_connected') {
+      checkGoogleStatus();
+    }
+  });
 }
 
 // ── NOTION SYNC ───────────────────────────────────────────────────────────────
@@ -97,20 +99,15 @@ async function syncFromNotion(silent) {
   if (btn) { btn.textContent = '⟳ ...'; btn.disabled = true; }
   if (!silent && statusEl) { statusEl.style.display = 'block'; statusEl.textContent = 'Sincronizando con Notion...'; }
   try {
-    var res = await fetch('/notes', {
-      method: 'GET',
-      headers: authHeaders()
-    });
+    var res = await fetch('/notes', { method: 'GET', headers: authHeaders() });
     if (res.status === 401) { doLogout(); return; }
     var data = await res.json();
     if (data.error) throw new Error(data.error);
 
-    // Merge: preserve local fields (pinned, content) by page_id
     var localMap = {};
     notes.forEach(function(n) {
       if (n.page_id) localMap[n.page_id] = n;
       else if (n.url) {
-        // fallback: derive page_id from URL
         var id = n.url.split('-').pop().replace(/\//g,'');
         localMap[id] = n;
       }
@@ -126,15 +123,13 @@ async function syncFromNotion(silent) {
 
     try { localStorage.setItem('sf_notes', JSON.stringify(notes.slice(0, 100))); } catch(e) {}
 
-    // Refresh any open views
-    var histActive = document.getElementById('view-history').classList.contains('active');
+    var histActive  = document.getElementById('view-history').classList.contains('active');
     var statsActive = document.getElementById('view-stats').classList.contains('active');
     var chatActive  = document.getElementById('view-chat').classList.contains('active');
     if (histActive)  renderHistory();
     if (statsActive) { renderStats(); renderReminders(); }
     if (chatActive)  renderCtx();
 
-    // Update subtitle count
     var tbSub = document.getElementById('tb-sub');
     if (tbSub && document.getElementById('view-history').classList.contains('active')) {
       tbSub.textContent = notes.length + ' notas procesadas';
@@ -163,29 +158,27 @@ function showView(name, sidebarEl, bnavId) {
   document.querySelectorAll('.bnav-item').forEach(function(n){ n.classList.remove('active'); });
   document.getElementById('view-' + name).classList.add('active');
 
-  // Activate sidebar item (desktop)
   if (sidebarEl) sidebarEl.classList.add('active');
-  // Sync sidebar buttons by name
-  var sidebarMap = { new:'btn-new', history:'btn-history', stats:'btn-stats', chat:'btn-chat' };
+  var sidebarMap = { new:'btn-new', history:'btn-history', stats:'btn-stats', chat:'btn-chat', inbox:'btn-inbox' };
   var sBtn = document.getElementById(sidebarMap[name]);
   if (sBtn) sBtn.classList.add('active');
 
-  // Activate bottom nav item (mobile)
   if (bnavId) document.getElementById(bnavId).classList.add('active');
-  var bnavMap = { new:'bnav-new', history:'bnav-history', stats:'bnav-stats', chat:'bnav-chat' };
+  var bnavMap = { new:'bnav-new', history:'bnav-history', stats:'bnav-stats', chat:'bnav-chat', inbox:'bnav-inbox' };
   var bBtn = document.getElementById(bnavMap[name]);
   if (bBtn) bBtn.classList.add('active');
 
   var titles = {
-    'new':     ['Nueva nota',        'Escribe y procesa a Notion'],
-    'history': ['Historial',         notes.length + ' notas procesadas'],
-    'stats':   ['Stats',             'Resumen de tu knowledge base'],
-    'chat':    ['Chat con notas',    'Pregunta sobre tu conocimiento']
+    'new':     ['Nueva nota',       'Escribe y procesa a Notion'],
+    'history': ['Historial',        notes.length + ' notas procesadas'],
+    'stats':   ['Stats',            'Resumen de tu knowledge base'],
+    'chat':    ['Chat con notas',   'Pregunta sobre tu conocimiento'],
+    'inbox':   ['Inbox',            'Gmail + Calendar'],
   };
   document.getElementById('tb-title').textContent = titles[name][0];
   document.getElementById('tb-sub').textContent   = titles[name][1];
   document.getElementById('process-btn').style.display = name === 'new' ? '' : 'none';
-  // Clear button: only on new view, only if content exists
+
   var clearBtn = document.getElementById('clear-btn');
   if (clearBtn) {
     if (name === 'new') {
@@ -196,9 +189,11 @@ function showView(name, sidebarEl, bnavId) {
       clearBtn.style.display = 'none';
     }
   }
+
   if (name === 'history') renderHistory();
   if (name === 'stats')   { renderStats(); renderReminders(); }
   if (name === 'chat')    renderCtx();
+  if (name === 'inbox')   initInboxView();
 }
 
 function setFilter(f, el) {
@@ -212,7 +207,6 @@ function updateCount() {
   var t = document.getElementById('note-title').value.length;
   var b = document.getElementById('note-body').value.length;
   document.getElementById('char-count').textContent = t + b;
-  // Show/hide clear button when there's content
   var clearBtn = document.getElementById('clear-btn');
   if (clearBtn) clearBtn.style.display = (t + b > 0) ? '' : 'none';
 }
@@ -249,6 +243,7 @@ async function processNote() {
     if (res.status === 401) { doLogout(); return; }
     if (res.status === 429) { setStatus('error', '⏳ Demasiadas solicitudes. Espera un momento.'); btn.disabled = false; btn.textContent = '⚡ Procesar'; return; }
     var data = await res.json();
+    setStatus('success', '✓ Guardado en Notion');
     document.getElementById('result-info').style.display = 'flex';
     document.getElementById('res-title').textContent   = data.title   || '—';
     document.getElementById('res-type').textContent    = data.type    || '—';
@@ -304,7 +299,6 @@ function renderHistory() {
     var pinIcon = n.pinned ? '📌' : '○';
     var dateStr = n.date ? new Date(n.date).toLocaleDateString('es-PE', {day:'2-digit',month:'short',year:'numeric'}) : '';
     var isBulkSel = bulkMode && bulkSelected[n.page_id];
-    // Reminder state
     var today = new Date().toISOString().slice(0,10);
     var rdClass = '';
     var reminderBadge = '';
@@ -358,8 +352,7 @@ async function reprocessNote(e, i) {
   if (!confirm('¿Re-procesar "'+n.title+'" con Gemini?')) return;
   try {
     var res = await fetch('/reprocess', {
-      method: 'POST',
-      headers: authHeaders(),
+      method: 'POST', headers: authHeaders(),
       body: JSON.stringify({ content: n.content })
     });
     if (res.status === 401) { doLogout(); return; }
@@ -377,18 +370,16 @@ async function reprocessNote(e, i) {
   }
 }
 
-// ── DELETE MODAL ──────────────────────────────────────────────────────────────
+// ── DELETE ────────────────────────────────────────────────────────────────────
 var _pendingDelete = null;
 
 function deleteNote(e, i) {
   e.stopPropagation();
   _pendingDelete = i;
-  var n = notes[i];
-  showDeleteModal(n.title);
+  showDeleteModal(notes[i].title);
 }
 
 function showDeleteModal(title) {
-  // Reutilizar el modal existente como modal de confirmación
   document.getElementById('edit-title').value = '';
   document.getElementById('edit-body').value  = '';
   var st = document.getElementById('edit-status');
@@ -400,7 +391,6 @@ function showDeleteModal(title) {
   var saveBtn = document.getElementById('edit-save-btn');
   saveBtn.textContent = '🗑 Solo del historial';
   saveBtn.onclick     = confirmDeleteLocal;
-  // Agregar botón "También de Notion" dinámicamente
   var notionBtn = document.getElementById('delete-notion-btn');
   if (!notionBtn) {
     notionBtn = document.createElement('button');
@@ -441,7 +431,6 @@ function confirmDeleteNotion() {
 }
 
 function closeDeleteModal() {
-  // Restaurar modal a su estado de edición
   document.querySelector('.modal-title').textContent = 'Editar nota';
   var notionBtn = document.getElementById('delete-notion-btn');
   if (notionBtn) notionBtn.style.display = 'none';
@@ -453,7 +442,7 @@ function closeDeleteModal() {
   document.getElementById('edit-modal').classList.remove('visible');
 }
 
-// ── STATS ────────────────────────────────────────────────────────────────────
+// ── STATS ─────────────────────────────────────────────────────────────────────
 function renderStats() {
   var c = document.getElementById('stats-container');
   if (!notes.length) {
@@ -488,7 +477,7 @@ function renderStats() {
   c.innerHTML = html;
 }
 
-// ── CHAT ─────────────────────────────────────────────────────────────────────
+// ── CHAT ──────────────────────────────────────────────────────────────────────
 var chatFilter = 'all';
 var ideasMode  = false;
 
@@ -505,10 +494,9 @@ function toggleIdeasMode(el) {
   el.style.borderColor = ideasMode ? '#444' : 'transparent';
   el.style.color       = ideasMode ? 'var(--text)' : 'var(--text3)';
   var input = document.getElementById('chat-input');
-  input.placeholder = ideasMode
-    ? 'Tema o área para explorar ideas...'
-    : 'Pregunta sobre tus notas...';
+  input.placeholder = ideasMode ? 'Tema o área para explorar ideas...' : 'Pregunta sobre tus notas...';
 }
+
 function renderCtx() {
   var c = document.getElementById('ctx-list');
   if (!notes.length) { c.innerHTML = '<div style="color:var(--text3);font-size:12px">Procesa notas primero.</div>'; return; }
@@ -522,7 +510,6 @@ function renderCtx() {
   }
   var html = '';
   filteredNotes.forEach(function(n) {
-    // FIX: usar page_id como clave, no el índice del array (se rompe si el orden cambia)
     var pid   = n.page_id;
     var on    = selected[pid] ? 'on' : '';
     var check = selected[pid] ? '<svg width="9" height="9" viewBox="0 0 9 9"><path d="M1.5 4.5l2 2L7.5 2" stroke="#0a0a0a" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>' : '';
@@ -534,7 +521,6 @@ function renderCtx() {
 }
 
 function toggleCtx(pid) {
-  // FIX: clave = page_id, no índice
   selected[pid] = !selected[pid];
   renderCtx();
 }
@@ -550,7 +536,6 @@ async function sendChat() {
   input.value = '';
   addMsg('user', q);
   var ctx = '';
-  // FIX: iterar por page_id, buscar nota por page_id
   Object.keys(selected).forEach(function(pid) {
     if (selected[pid]) {
       var nota = notes.find(function(n){ return n.page_id === pid; });
@@ -559,18 +544,10 @@ async function sendChat() {
   });
   var loadEl = addMsg('assistant', '<span class="spin"></span>');
   try {
-    var prompt;
-    if (ideasMode) {
-      var ctxBlock = ctx ? 'NOTAS DE CONTEXTO:\n' + ctx : 'No hay notas seleccionadas, usa tu criterio general.';
-      prompt = 'Eres un asistente creativo de brainstorming. Basándote en las notas de contexto, genera ideas concretas, conexiones no obvias entre conceptos, oportunidades de acción y preguntas que vale la pena explorar. Sé específico, directo y propositivo. Responde en español.\n\n' + ctxBlock + '\n\nTEMA A EXPLORAR: ' + q;
-    } else {
-      prompt = null; // backend usa su propio prompt
-    }
     var body = { question: q, context: ctx };
     if (ideasMode) body.ideas_mode = true;
     var res = await fetch('/chat', {
-      method: 'POST',
-      headers: authHeaders(),
+      method: 'POST', headers: authHeaders(),
       body: JSON.stringify(body)
     });
     if (res.status === 401) { doLogout(); return; }
@@ -599,7 +576,7 @@ function esc(str) {
   return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-// ── BULK SELECT ──────────────────────────────────────────────────────────────
+// ── BULK SELECT ───────────────────────────────────────────────────────────────
 var bulkMode     = false;
 var bulkSelected = {};
 
@@ -644,7 +621,7 @@ async function bulkDelete() {
   toggleBulkMode();
 }
 
-// ── EDIT MODAL ───────────────────────────────────────────────────────────────
+// ── EDIT MODAL ────────────────────────────────────────────────────────────────
 var editingIndex = -1;
 
 function openEditModal(e, idx) {
@@ -662,7 +639,6 @@ function openEditModal(e, idx) {
 
 function closeEditModal(e) {
   if (e && e.target !== document.getElementById('edit-modal')) return;
-  // Si estaba en modo delete, limpiar estado
   if (_pendingDelete !== null) { closeDeleteModal(); return; }
   document.getElementById('edit-modal').classList.remove('visible');
   editingIndex = -1;
@@ -710,7 +686,7 @@ async function saveEditedNote() {
   }
 }
 
-// ── REMINDERS ────────────────────────────────────────────────────────────────
+// ── REMINDERS ─────────────────────────────────────────────────────────────────
 var reminderIndex = -1;
 
 function openReminderModal(e, idx) {
@@ -798,7 +774,7 @@ async function renderReminders() {
         '<span class="panel-label">'+reminders.length+' pendiente'+(reminders.length!==1?'s':'')+'</span>' +
       '</div>';
     reminders.forEach(function(r) {
-      var dotClass = r.is_overdue ? 'overdue' : r.is_today ? 'today' : '';
+      var dotClass  = r.is_overdue ? 'overdue' : r.is_today ? 'today' : '';
       var dateLabel = r.is_today ? 'Hoy' : r.is_overdue ? 'Vencido · '+r.reminder_date.slice(0,10) : r.reminder_date.slice(0,10);
       html += '<div class="reminder-item">' +
         '<div class="reminder-dot '+dotClass+'"></div>' +
@@ -821,7 +797,6 @@ async function clearReminderById(pageId, btn) {
       method: 'POST', headers: authHeaders(),
       body: JSON.stringify({ page_id: pageId, date: '' })
     });
-    // Update local notes array
     notes.forEach(function(n){ if (n.page_id === pageId) n.reminder_date = null; });
     try { localStorage.setItem('sf_notes', JSON.stringify(notes)); } catch(e) {}
     renderReminders();
@@ -831,7 +806,135 @@ async function clearReminderById(pageId, btn) {
   }
 }
 
-// ── BOOT ─────────────────────────────────────────────────────────────────────
+// ── INBOX / GOOGLE ────────────────────────────────────────────────────────────
+var googleConnected = false;
+
+async function checkGoogleStatus() {
+  try {
+    var res = await fetch('/auth/google/status', { headers: authHeaders() });
+    var data = await res.json();
+    googleConnected = data.connected;
+    var connectDiv = document.getElementById('inbox-connect');
+    var contentDiv = document.getElementById('inbox-content');
+    if (connectDiv) connectDiv.style.display = googleConnected ? 'none' : 'block';
+    if (contentDiv) contentDiv.style.display = googleConnected ? 'block' : 'none';
+    if (googleConnected) {
+      loadInbox();
+      loadCalendar();
+    }
+  } catch(e) {
+    console.error('Error checking Google status:', e);
+  }
+}
+
+function initInboxView() {
+  checkGoogleStatus();
+}
+
+function connectGoogle() {
+  // Abre el flujo OAuth en popup
+  var w = 600, h = 700;
+  var left = (screen.width  - w) / 2;
+  var top  = (screen.height - h) / 2;
+  // El endpoint /auth/google necesita el token — lo pasamos via header no es posible en redirect
+  // Alternativa: window.location para redirect directo
+  window.open(
+    '/auth/google?_token=' + encodeURIComponent(authToken),
+    'google_oauth',
+    'width='+w+',height='+h+',left='+left+',top='+top
+  );
+}
+
+async function loadInbox() {
+  var el = document.getElementById('email-list');
+  if (!el) return;
+  el.innerHTML = '<div class="inbox-loading"><span class="spin"></span> Cargando Gmail...</div>';
+  try {
+    var res = await fetch('/inbox', { headers: authHeaders() });
+    if (res.status === 401) { doLogout(); return; }
+    if (res.status === 403) {
+      el.innerHTML = '<div class="inbox-empty">Google desconectado. <button class="btn btn-primary" style="margin-top:10px" onclick="connectGoogle()">Reconectar</button></div>';
+      googleConnected = false;
+      document.getElementById('inbox-connect').style.display = 'block';
+      document.getElementById('inbox-content').style.display = 'none';
+      return;
+    }
+    var data = await res.json();
+    if (data.error) throw new Error(data.error);
+    var emails  = data.emails || [];
+    var unread  = emails.filter(function(e){ return e.unread; }).length;
+    // Actualizar badge
+    var badge = document.getElementById('nav-unread');
+    if (badge) {
+      if (unread > 0) { badge.textContent = unread; badge.style.display = 'inline'; }
+      else            { badge.style.display = 'none'; }
+    }
+    if (!emails.length) {
+      el.innerHTML = '<div class="inbox-empty">Inbox vacío 🎉</div>';
+      return;
+    }
+    var html = '';
+    emails.forEach(function(email) {
+      var fromShort = email.from.replace(/<[^>]+>/, '').trim() || email.from;
+      html += '<a href="'+email.url+'" target="_blank" class="email-item'+(email.unread?' unread':'')+'">' +
+        '<div class="email-from">'+esc(fromShort)+'</div>' +
+        '<div class="email-subject">'+esc(email.subject)+'</div>' +
+        '<div class="email-snippet">'+esc(email.snippet)+'</div>' +
+        '</a>';
+    });
+    el.innerHTML = html;
+  } catch(e) {
+    el.innerHTML = '<div class="inbox-empty" style="color:var(--red)">Error: '+esc(e.message)+'</div>';
+  }
+}
+
+async function loadCalendar() {
+  var el = document.getElementById('event-list');
+  if (!el) return;
+  el.innerHTML = '<div class="inbox-loading"><span class="spin"></span> Cargando Calendar...</div>';
+  try {
+    var res = await fetch('/calendar', { headers: authHeaders() });
+    if (res.status === 401) { doLogout(); return; }
+    if (res.status === 403) {
+      el.innerHTML = '<div class="inbox-empty">Google desconectado.</div>';
+      return;
+    }
+    var data = await res.json();
+    if (data.error) throw new Error(data.error);
+    var events = data.events || [];
+    if (!events.length) {
+      el.innerHTML = '<div class="inbox-empty">Sin eventos próximos</div>';
+      return;
+    }
+    var html = '';
+    events.forEach(function(ev) {
+      var startDate = ev.start ? new Date(ev.start) : null;
+      var dateStr   = '';
+      var timeStr   = '';
+      if (startDate) {
+        dateStr = startDate.toLocaleDateString('es-PE', {weekday:'short',day:'2-digit',month:'short'});
+        if (!ev.all_day) {
+          timeStr = startDate.toLocaleTimeString('es-PE', {hour:'2-digit',minute:'2-digit'});
+        }
+      }
+      html += '<a href="'+ev.url+'" target="_blank" class="event-item">' +
+        '<div class="event-date-col">' +
+          '<div class="event-date">'+dateStr+'</div>' +
+          (timeStr ? '<div class="event-time">'+timeStr+'</div>' : '<div class="event-time">Todo el día</div>') +
+        '</div>' +
+        '<div class="event-info">' +
+          '<div class="event-title">'+esc(ev.title)+'</div>' +
+          (ev.location ? '<div class="event-location">📍 '+esc(ev.location)+'</div>' : '') +
+        '</div>' +
+        '</a>';
+    });
+    el.innerHTML = html;
+  } catch(e) {
+    el.innerHTML = '<div class="inbox-empty" style="color:var(--red)">Error: '+esc(e.message)+'</div>';
+  }
+}
+
+// ── BOOT ──────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', checkAuth);
 document.addEventListener('keydown', function(e) {
   if (e.key === 'Escape') {

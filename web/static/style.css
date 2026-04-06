@@ -473,3 +473,84 @@ body { background: var(--bg); color: var(--text); font-family: 'DM Mono', monosp
   .stats-grid { grid-template-columns: repeat(2, 1fr); }
   .stat-value { font-size: 26px; }
 }
+
+/* ── NAV BADGE ───────────────────────────────────────────── */
+.nav-badge {
+  margin-left: auto; padding: 1px 6px;
+  background: var(--red); color: #fff;
+  border-radius: 10px; font-size: 9px; font-weight: 500;
+}
+
+/* ── INBOX LAYOUT ────────────────────────────────────────── */
+.inbox-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  max-width: 1080px;
+  height: calc(100vh - 114px);
+}
+.inbox-col { display: flex; flex-direction: column; min-height: 0; }
+
+/* ── EMAIL ITEMS ─────────────────────────────────────────── */
+.email-item {
+  display: block; padding: 12px 18px;
+  border-bottom: 1px solid var(--border);
+  text-decoration: none; transition: background 0.12s;
+  cursor: pointer;
+}
+.email-item:hover { background: var(--surface2); }
+.email-item:last-child { border-bottom: none; }
+.email-from {
+  font-size: 11px; color: var(--text3);
+  margin-bottom: 3px; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis;
+}
+.email-item.unread .email-from { color: var(--text2); }
+.email-subject {
+  font-size: 12px; color: var(--text2); margin-bottom: 4px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.email-item.unread .email-subject { color: var(--text); font-weight: 500; }
+.email-snippet {
+  font-size: 11px; color: var(--text3); line-height: 1.5;
+  display: -webkit-box; -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical; overflow: hidden;
+}
+
+/* ── CALENDAR EVENT ITEMS ────────────────────────────────── */
+.event-item {
+  display: flex; gap: 14px; padding: 12px 18px;
+  border-bottom: 1px solid var(--border);
+  text-decoration: none; transition: background 0.12s;
+  cursor: pointer;
+}
+.event-item:hover { background: var(--surface2); }
+.event-item:last-child { border-bottom: none; }
+.event-date-col { flex-shrink: 0; width: 70px; }
+.event-date { font-size: 11px; color: var(--text2); margin-bottom: 2px; }
+.event-time { font-size: 10px; color: var(--text3); }
+.event-info { flex: 1; min-width: 0; }
+.event-title {
+  font-size: 12px; color: var(--text); margin-bottom: 3px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.event-location { font-size: 10px; color: var(--text3); }
+
+/* ── INBOX STATES ────────────────────────────────────────── */
+.inbox-loading {
+  padding: 20px 18px; font-size: 12px; color: var(--text3);
+  display: flex; align-items: center; gap: 8px;
+}
+.inbox-empty {
+  padding: 40px 18px; font-size: 12px; color: var(--text3);
+  text-align: center;
+}
+
+/* ── RESPONSIVE ──────────────────────────────────────────── */
+@media (max-width: 900px) {
+  .inbox-layout { grid-template-columns: 1fr; height: auto; }
+  .inbox-col:last-child { height: 300px; }
+}
+@media (max-width: 640px) {
+  .inbox-layout { grid-template-columns: 1fr; gap: 14px; height: auto; }
+}
