@@ -54,13 +54,17 @@ async function doLogout() {
 async function checkAuth() {
   if (!authToken) { showLogin(); return; }
   try {
-    var res = await fetch('/process', {
-      method: 'POST',
-      headers: authHeaders(),
-      body: JSON.stringify({ content: '__ping__' })
-    });
-    if (res.status === 401) { showLogin(); return; }
-  } catch(e) {}
+    var res = await fetch('/auth/google/status', { headers: authHeaders() });
+    if (res.status === 401) {
+      localStorage.removeItem('brain_token');
+      authToken = null;
+      showLogin();
+      return;
+    }
+  } catch(e) {
+    showLogin();
+    return;
+  }
   showApp();
 }
 
