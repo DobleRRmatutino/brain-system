@@ -1,5 +1,7 @@
 import sys
 import os
+import re
+import base64
 import secrets
 import logging
 import time
@@ -52,6 +54,52 @@ def check_rate_limit(token: str):
     if len(_rate_buckets[token]) >= RATE_LIMIT:
         raise HTTPException(status_code=429, detail="Demasiadas solicitudes. Espera un momento.")
     _rate_buckets[token].append(now)
+
+def _decode_gmail_body(data: str) -> str:
+    if not data:
+        return ""
+    try:
+        padding = "=" * (-len(data) % 4)
+        return base64.urlsafe_b64decode(data + padding).decode("utf-8", errors="replace")
+    except Exception:
+        return ""
+
+def _strip_html(html: str) -> str:
+    if not html:
+        return ""
+    text = re.sub(r"(?is)<(script|style).*?>.*?</\1>", "", html)
+    text = re.sub(r"(?i)<br\s*/?>", "\n", text)
+    text = re.sub(r"(?i)</p\s*>", "\n\n", text)
+    text = re.sub(r"(?is)<[^>]+>", "", text)
+    text = text.replace("&nbsp;", " ").replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">")
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
+
+def _extract_message_body(payload: dict) -> str:
+    if not payload:
+        return ""
+
+    mime_type = payload.get("mimeType", "")
+    body_data = _decode_gmail_body(payload.get("body", {}).get("data", ""))
+
+    if mime_type == "text/plain" and body_data:
+        return body_data.strip()
+    if mime_type == "text/html" and body_data:
+        return _strip_html(body_data)
+
+    plain_fallback = ""
+    html_fallback = ""
+    for part in payload.get("parts", []) or []:
+        part_body = _extract_message_body(part)
+        part_type = part.get("mimeType", "")
+        if part_type == "text/plain" and part_body:
+            return part_body
+        if part_type == "text/html" and part_body and not html_fallback:
+            html_fallback = part_body
+        if part_body and not plain_fallback:
+            plain_fallback = part_body
+
+    return html_fallback or plain_fallback
 
 # ── App ───────────────────────────────────────────────────────────────────────
 app = FastAPI()
@@ -389,19 +437,21 @@ async def get_inbox(token: str = Depends(verify_token)):
                 r = await client.get(
                     f"https://gmail.googleapis.com/gmail/v1/users/me/messages/{msg_id}",
                     headers={"Authorization": f"Bearer {access}"},
-                    params={"format": "metadata", "metadataHeaders": ["From", "Subject", "Date"]},
+                    params={"format": "full"},
                 )
                 if r.status_code != 200:
                     continue
                 data    = r.json()
                 headers = {h["name"]: h["value"] for h in data.get("payload", {}).get("headers", [])}
                 labels  = data.get("labelIds", [])
+                body    = _extract_message_body(data.get("payload", {}))
                 emails.append({
                     "id":      msg_id,
                     "from":    headers.get("From", ""),
                     "subject": headers.get("Subject", "(sin asunto)"),
                     "date":    headers.get("Date", ""),
                     "snippet": data.get("snippet", ""),
+                    "body":    body or data.get("snippet", ""),
                     "unread":  "UNREAD" in labels,
                     "url":     f"https://mail.google.com/mail/u/0/#inbox/{msg_id}",
                 })

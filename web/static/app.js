@@ -1061,6 +1061,7 @@ function showEmailPreview(email, itemEl) {
   var fromName = email.from.replace(/<[^>]+>/, '').trim() || email.from;
   var isMobile = window.innerWidth <= 900;
   var pane = document.querySelector('.gmail-2pane');
+  var bodyText = email.body || email.snippet || '';
 
   document.querySelectorAll('.email-item').forEach(function(el) {
     el.classList.remove('selected');
@@ -1070,11 +1071,13 @@ function showEmailPreview(email, itemEl) {
   preview.innerHTML =
     '<div class="email-preview-panel">' +
       (isMobile ? '<button class="email-back-btn" onclick="hideEmailPreview()">← Volver</button>' : '') +
+      '<div class="preview-actions">' +
+        '<a href="' + esc(email.url || '#') + '" target="_blank" class="preview-open-link">Abrir en Gmail ↗</a>' +
+      '</div>' +
       '<div class="preview-subject">' + esc(email.subject || '') + '</div>' +
       '<div class="preview-from">' + esc(fromName) + '</div>' +
       '<div class="preview-date">' + esc(emailTimeStr(email.date)) + '</div>' +
-      '<div class="preview-body">' + esc(email.snippet || '') + '</div>' +
-      '<a href="' + esc(email.url || '#') + '" target="_blank" class="preview-open-link">Abrir en Gmail ↗</a>' +
+      '<div class="preview-body">' + esc(bodyText) + '</div>' +
     '</div>';
 
   preview.classList.add('active');

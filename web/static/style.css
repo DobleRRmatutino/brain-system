@@ -1339,6 +1339,11 @@ body {
   padding: 28px 32px;
   display: flex; flex-direction: column; height: 100%;
 }
+.preview-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 18px;
+}
 .preview-subject {
   font-family: var(--font-ui); font-size: 20px;
   font-weight: 300; color: var(--text-display);
@@ -1361,6 +1366,7 @@ body {
   color: var(--text-secondary); line-height: 1.8;
   flex: 1; overflow-y: auto;
   white-space: pre-wrap;
+  word-break: break-word;
 }
 .preview-open-link {
   display: inline-flex; align-items: center; gap: 6px;
@@ -1508,6 +1514,8 @@ body {
   .gmail-preview { display: none; }
   .gmail-2pane.preview-open .gmail-list { display: none; }
   .gmail-2pane.preview-open .gmail-preview { display: block; }
+  .email-preview-panel { padding: 20px; }
+  .preview-actions { justify-content: flex-start; margin-bottom: 14px; }
 }
 
 /* ══════════════════════════════════════════════════════════
