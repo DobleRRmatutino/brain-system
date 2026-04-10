@@ -1395,7 +1395,14 @@ body {
   color: var(--text-secondary); letter-spacing: 0.06em;
 }
 
-.cal-grid-wrap { flex: 1; overflow-y: auto; overflow-x: auto; display: flex; flex-direction: column; }
+.cal-grid-wrap {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
 
 .cal-grid-head {
   display: flex; flex-shrink: 0;
@@ -1425,7 +1432,7 @@ body {
   font-size: 13px; font-weight: 500; margin: 2px auto 0;
 }
 
-.cal-grid-body { display: flex; flex: 1; min-width: 480px; }
+.cal-grid-body { display: flex; flex: 1; min-width: 640px; }
 .cal-gutter { width: 48px; flex-shrink: 0; border-right: 1px solid var(--border); }
 .cal-time-label {
   height: 56px; display: flex; align-items: flex-start;
@@ -1436,10 +1443,10 @@ body {
 }
 
 .cal-day-col {
-  flex: 1; position: relative;
+  flex: 1 0 0; position: relative;
   border-right: 1px solid var(--border);
   height: 784px; /* 14h × 56px */
-  min-width: 64px;
+  min-width: 84px;
 }
 .cal-day-col:last-child { border-right: none; }
 .cal-day-col.today-col { background: rgba(255,255,255,0.018); }
