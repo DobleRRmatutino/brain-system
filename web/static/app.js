@@ -866,32 +866,38 @@ function connectGoogle() {
   );
 }
 
-function showEmailPreview(idx) {
-  var email   = _inboxEmails[idx];
+function showEmailPreview(email, itemEl) {
   var preview = document.getElementById('email-preview');
   if (!preview || !email) return;
+
   var fromName = email.from.replace(/<[^>]+>/, '').trim() || email.from;
-  var isMobile = window.innerWidth < 768;
-  preview.innerHTML =
-    '<div class="email-preview-header">' +
-      (isMobile ? '<button class="email-back-btn" onclick="hideEmailPreview()">← Volver</button>' : '') +
-      '<div class="email-preview-subject">' + esc(email.subject) + '</div>' +
-      '<div class="email-preview-meta">' +
-        '<span class="email-preview-from">' + esc(fromName) + '</span>' +
-        '<span class="email-preview-date">' + esc(emailTimeStr(email.date)) + '</span>' +
-      '</div>' +
-    '</div>' +
-    '<div class="email-preview-snippet">' + esc(email.snippet || '') + '</div>' +
-    '<a href="' + email.url + '" target="_blank" class="email-open-link">Abrir en Gmail ↗</a>';
-  preview.classList.add('active');
-  document.querySelectorAll('.email-item').forEach(function(el, i) {
-    el.classList.toggle('selected', i === idx);
+  var isMobile = window.innerWidth <= 900;
+  var pane = document.querySelector('.gmail-2pane');
+
+  document.querySelectorAll('.email-item').forEach(function(el) {
+    el.classList.remove('selected');
   });
+  if (itemEl) itemEl.classList.add('selected');
+
+  preview.innerHTML =
+    '<div class="email-preview-panel">' +
+      (isMobile ? '<button class="email-back-btn" onclick="hideEmailPreview()">← Volver</button>' : '') +
+      '<div class="preview-subject">' + esc(email.subject || '') + '</div>' +
+      '<div class="preview-from">' + esc(fromName) + '</div>' +
+      '<div class="preview-date">' + esc(emailTimeStr(email.date)) + '</div>' +
+      '<div class="preview-body">' + esc(email.snippet || '') + '</div>' +
+      '<a href="' + esc(email.url || '#') + '" target="_blank" class="preview-open-link">Abrir en Gmail ↗</a>' +
+    '</div>';
+
+  preview.classList.add('active');
+  if (isMobile && pane) pane.classList.add('preview-open');
 }
 
 function hideEmailPreview() {
   var preview = document.getElementById('email-preview');
   if (preview) preview.classList.remove('active');
+  var pane = document.querySelector('.gmail-2pane');
+  if (pane) pane.classList.remove('preview-open');
   document.querySelectorAll('.email-item').forEach(function(el) {
     el.classList.remove('selected');
   });
@@ -939,7 +945,7 @@ async function loadInbox() {
     var html = '';
     emails.forEach(function(email, idx) {
       var fromName = email.from.replace(/<[^>]+>/, '').trim() || email.from;
-      html += '<div class="email-item' + (email.unread ? ' unread' : '') + '" onclick="showEmailPreview(' + idx + ')">' +
+      html += '<div class="email-item' + (email.unread ? ' unread' : '') + '" onclick="showEmailPreview(_inboxEmails[' + idx + '], this)">' +
         '<div class="email-avatar" style="background:' + avatarColor(email.from) + '">' +
           (email.from.charAt(0) || '?').toUpperCase() +
           (email.unread ? '<div class="email-unread-dot"></div>' : '') +
@@ -964,30 +970,29 @@ async function loadCalendar() {
   if (!el) { console.warn('loadCalendar: #cal-grid-wrap not found'); return; }
 
   try {
-  var HOUR_START = 7, HOUR_COUNT = 14, HOUR_H = 56;
-  var DAY_NAMES  = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
-  var EVT_COLORS = ['#4A8EF5','#E57373','#81C784','#FFB74D','#BA68C8','#4DD0E1'];
+    var HOUR_START = 7, HOUR_COUNT = 14, HOUR_H = 56;
+    var DAY_NAMES  = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
+    var EVT_COLORS = ['#4A8EF5','#E57373','#81C784','#FFB74D','#BA68C8','#4DD0E1'];
 
-  var today  = new Date();
-  var monday = new Date(today);
-  var dow    = today.getDay();
-  monday.setDate(today.getDate() - (dow === 0 ? 6 : dow - 1) + (calWeekOffset * 7));
-  monday.setHours(0, 0, 0, 0);
-  var sunday = new Date(monday);
-  sunday.setDate(monday.getDate() + 6);
-  sunday.setHours(23, 59, 59, 999);
+    var today  = new Date();
+    var monday = new Date(today);
+    var dow    = today.getDay();
+    monday.setDate(today.getDate() - (dow === 0 ? 6 : dow - 1) + (calWeekOffset * 7));
+    monday.setHours(0, 0, 0, 0);
+    var sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+    sunday.setHours(23, 59, 59, 999);
 
-  var labelEl = document.getElementById('cal-week-label');
-  if (labelEl) {
-    labelEl.textContent =
-      monday.toLocaleDateString('es-PE', { day: '2-digit', month: 'short' }) +
-      ' — ' +
-      sunday.toLocaleDateString('es-PE', { day: '2-digit', month: 'short' });
-  }
+    var labelEl = document.getElementById('cal-week-label');
+    if (labelEl) {
+      labelEl.textContent =
+        monday.toLocaleDateString('es-PE', { day: '2-digit', month: 'short' }) +
+        ' — ' +
+        sunday.toLocaleDateString('es-PE', { day: '2-digit', month: 'short' });
+    }
 
-  el.innerHTML = '<div class="inbox-loading"><span class="spin"></span> Cargando Calendar...</div>';
+    el.innerHTML = '<div class="inbox-loading"><span class="spin"></span> Cargando Calendar...</div>';
 
-  try {
     var res = await fetch(
       '/calendar?time_min=' + encodeURIComponent(monday.toISOString()) +
       '&time_max=' + encodeURIComponent(sunday.toISOString()),
@@ -1095,14 +1100,9 @@ async function loadCalendar() {
     if (calWeekOffset === 0) {
       el.scrollTop = (nowH - 8) * HOUR_H;
     }
-
   } catch(e) {
-    console.error('loadCalendar fetch/render error:', e);
-    el.innerHTML = '<div class="inbox-empty" style="color:var(--red);white-space:pre-wrap">Error: ' + esc(e.message) + '\n' + esc(e.stack || '') + '</div>';
-  }
-  } catch(e) {
-    console.error('loadCalendar outer error:', e);
-    el.innerHTML = '<div class="inbox-empty" style="color:var(--red);white-space:pre-wrap">Error (outer): ' + esc(e.message) + '\n' + esc(e.stack || '') + '</div>';
+    console.error('loadCalendar error:', e);
+    el.innerHTML = '<div class="inbox-empty" style="color:var(--red)">Error: ' + esc(e.message) + '</div>';
   }
 }
 
