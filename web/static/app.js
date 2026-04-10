@@ -812,7 +812,8 @@ async function clearReminderById(pageId, btn) {
 
 // ── INBOX / GOOGLE ────────────────────────────────────────────────────────────
 var googleConnected = false;
-var calWeekOffset = 0;
+var calWeekOffset   = 0;
+var _inboxEmails    = [];
 
 function avatarColor(str) {
   var palette = ['#4A8EF5','#E57373','#81C784','#FFB74D','#BA68C8','#4DD0E1','#F06292','#AED581','#FF8A65','#90A4AE'];
@@ -865,6 +866,37 @@ function connectGoogle() {
   );
 }
 
+function showEmailPreview(idx) {
+  var email   = _inboxEmails[idx];
+  var preview = document.getElementById('email-preview');
+  if (!preview || !email) return;
+  var fromName = email.from.replace(/<[^>]+>/, '').trim() || email.from;
+  var isMobile = window.innerWidth < 768;
+  preview.innerHTML =
+    '<div class="email-preview-header">' +
+      (isMobile ? '<button class="email-back-btn" onclick="hideEmailPreview()">← Volver</button>' : '') +
+      '<div class="email-preview-subject">' + esc(email.subject) + '</div>' +
+      '<div class="email-preview-meta">' +
+        '<span class="email-preview-from">' + esc(fromName) + '</span>' +
+        '<span class="email-preview-date">' + esc(emailTimeStr(email.date)) + '</span>' +
+      '</div>' +
+    '</div>' +
+    '<div class="email-preview-snippet">' + esc(email.snippet || '') + '</div>' +
+    '<a href="' + email.url + '" target="_blank" class="email-open-link">Abrir en Gmail ↗</a>';
+  preview.classList.add('active');
+  document.querySelectorAll('.email-item').forEach(function(el, i) {
+    el.classList.toggle('selected', i === idx);
+  });
+}
+
+function hideEmailPreview() {
+  var preview = document.getElementById('email-preview');
+  if (preview) preview.classList.remove('active');
+  document.querySelectorAll('.email-item').forEach(function(el) {
+    el.classList.remove('selected');
+  });
+}
+
 function switchInboxTab(tab) {
   document.querySelectorAll('.inbox-tab').forEach(function(t){ t.classList.remove('active'); });
   document.querySelectorAll('.inbox-pane').forEach(function(p){ p.classList.remove('active'); });
@@ -903,10 +935,11 @@ async function loadInbox() {
       el.innerHTML = '<div class="inbox-empty">Inbox vacío 🎉</div>';
       return;
     }
+    _inboxEmails = emails;
     var html = '';
-    emails.forEach(function(email) {
+    emails.forEach(function(email, idx) {
       var fromName = email.from.replace(/<[^>]+>/, '').trim() || email.from;
-      html += '<a href="' + email.url + '" target="_blank" class="email-item' + (email.unread ? ' unread' : '') + '">' +
+      html += '<div class="email-item' + (email.unread ? ' unread' : '') + '" onclick="showEmailPreview(' + idx + ')">' +
         '<div class="email-avatar" style="background:' + avatarColor(email.from) + '">' +
           (email.from.charAt(0) || '?').toUpperCase() +
           (email.unread ? '<div class="email-unread-dot"></div>' : '') +
@@ -914,7 +947,7 @@ async function loadInbox() {
         '<div class="email-from">' + esc(fromName) + '</div>' +
         '<div class="email-time-col">' + esc(emailTimeStr(email.date)) + '</div>' +
         '<div class="email-subject">' + esc(email.subject) + '</div>' +
-        '</a>';
+        '</div>';
     });
     el.innerHTML = html;
   } catch(e) {
@@ -928,8 +961,9 @@ function calGoToday()  { calWeekOffset = 0; loadCalendar(); }
 
 async function loadCalendar() {
   var el = document.getElementById('cal-grid-wrap');
-  if (!el) return;
+  if (!el) { console.warn('loadCalendar: #cal-grid-wrap not found'); return; }
 
+  try {
   var HOUR_START = 7, HOUR_COUNT = 14, HOUR_H = 56;
   var DAY_NAMES  = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
   var EVT_COLORS = ['#4A8EF5','#E57373','#81C784','#FFB74D','#BA68C8','#4DD0E1'];
@@ -1063,7 +1097,12 @@ async function loadCalendar() {
     }
 
   } catch(e) {
-    el.innerHTML = '<div class="inbox-empty" style="color:var(--red)">Error: '+esc(e.message)+'</div>';
+    console.error('loadCalendar fetch/render error:', e);
+    el.innerHTML = '<div class="inbox-empty" style="color:var(--red);white-space:pre-wrap">Error: ' + esc(e.message) + '\n' + esc(e.stack || '') + '</div>';
+  }
+  } catch(e) {
+    console.error('loadCalendar outer error:', e);
+    el.innerHTML = '<div class="inbox-empty" style="color:var(--red);white-space:pre-wrap">Error (outer): ' + esc(e.message) + '\n' + esc(e.stack || '') + '</div>';
   }
 }
 
