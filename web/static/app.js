@@ -835,16 +835,34 @@ function getCalendarContainer() {
   return document.getElementById('cal-grid-wrap') || document.getElementById('event-list');
 }
 
+function renderViewLoading(el, label) {
+  if (!el) return;
+  el.innerHTML = '<div class="inbox-loading"><span class="spin"></span> ' + esc(label || 'Cargando...') + '</div>';
+}
+
+function renderViewEmpty(el, message) {
+  if (!el) return;
+  el.innerHTML = '<div class="inbox-empty">' + esc(message || '') + '</div>';
+}
+
+function renderViewError(el, message) {
+  if (!el) return;
+  el.innerHTML = '<div class="inbox-empty" style="color:var(--red)">Error: ' + esc(message || 'Unknown error') + '</div>';
+}
+
+function renderReconnectState(el, message) {
+  if (!el) return;
+  el.innerHTML = '<div class="inbox-empty">' + esc(message || 'Google desconectado.') + ' <button class="btn btn-primary" style="margin-top:10px" onclick="connectGoogle()">Reconectar</button></div>';
+}
+
 function renderCalendarError(message) {
   var el = getCalendarContainer();
-  if (!el) return;
-  el.innerHTML = '<div class="inbox-empty" style="color:var(--red)">Error: ' + esc(message || 'Unknown calendar error') + '</div>';
+  renderViewError(el, message || 'Unknown calendar error');
 }
 
 function renderCalendarEmpty() {
   var el = getCalendarContainer();
-  if (!el) return;
-  el.innerHTML = '<div class="inbox-empty">No hay eventos esta semana</div>';
+  renderViewEmpty(el, 'No hay eventos esta semana');
 }
 
 function getCalendarRange(offset) {
@@ -1087,12 +1105,12 @@ function switchInboxTab(tab) {
 async function loadInbox() {
   var el = getEmailListContainer();
   if (!el) return;
-  el.innerHTML = '<div class="inbox-loading"><span class="spin"></span> Cargando Gmail...</div>';
+  renderViewLoading(el, 'Cargando Gmail...');
   try {
     var res = await fetch('/inbox', { headers: authHeaders() });
     if (res.status === 401) { doLogout(); return; }
     if (res.status === 403) {
-      el.innerHTML = '<div class="inbox-empty">Google desconectado. <button class="btn btn-primary" style="margin-top:10px" onclick="connectGoogle()">Reconectar</button></div>';
+      renderReconnectState(el, 'Google desconectado.');
       googleConnected = false;
       var connectDiv = getInboxConnectContainer();
       var contentDiv = getInboxContentContainer();
@@ -1110,7 +1128,7 @@ async function loadInbox() {
       else            { badge.style.display = 'none'; }
     }
     if (!emails.length) {
-      el.innerHTML = '<div class="inbox-empty">Inbox vacío 🎉</div>';
+      renderViewEmpty(el, 'Inbox vacio');
       return;
     }
     _inboxEmails = emails;
@@ -1129,7 +1147,7 @@ async function loadInbox() {
     });
     el.innerHTML = html;
   } catch(e) {
-    el.innerHTML = '<div class="inbox-empty" style="color:var(--red)">Error: '+esc(e.message)+'</div>';
+    renderViewError(el, e.message);
   }
 }
 
@@ -1150,7 +1168,7 @@ async function loadCalendar() {
     var monday = range.monday;
     var sunday = range.sunday;
     setCalendarWeekLabel(monday, sunday);
-    el.innerHTML = '<div class="inbox-loading"><span class="spin"></span> Cargando Calendar...</div>';
+    renderViewLoading(el, 'Cargando Calendar...');
     var events = await fetchCalendarEvents(monday, sunday);
     if (events === null) {
       return;
