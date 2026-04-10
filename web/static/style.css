@@ -1342,6 +1342,8 @@ body {
 .preview-actions {
   display: flex;
   justify-content: flex-end;
+  gap: 10px;
+  align-items: center;
   margin-bottom: 18px;
 }
 .preview-subject {
@@ -1370,7 +1372,6 @@ body {
 }
 .preview-open-link {
   display: inline-flex; align-items: center; gap: 6px;
-  margin-top: 20px;
   font-family: var(--font-mono); font-size: 10px;
   letter-spacing: 0.08em; text-transform: uppercase;
   color: var(--text-disabled); text-decoration: none;
@@ -1379,6 +1380,58 @@ body {
   transition: all 150ms var(--ease); align-self: flex-start;
 }
 .preview-open-link:hover { color: var(--text-display); border-color: var(--text-disabled); }
+.reply-composer {
+  margin-top: 24px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+}
+.reply-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-disabled);
+  margin-bottom: 10px;
+}
+.reply-textarea {
+  width: 100%;
+  min-height: 132px;
+  resize: vertical;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  line-height: 1.7;
+  padding: 14px 16px;
+  outline: none;
+}
+.reply-textarea:focus {
+  border-color: var(--border-visible);
+}
+.reply-status {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+}
+.reply-status.sending {
+  color: var(--text-secondary);
+  background: var(--surface-raised);
+}
+.reply-status.success {
+  color: var(--green);
+  background: rgba(74, 222, 128, 0.08);
+}
+.reply-status.error {
+  color: var(--red);
+  background: rgba(215, 25, 33, 0.08);
+}
+.reply-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 12px;
+}
 
 /* ── Calendar week grid ────────────────────────────────── */
 .cal-nav {
@@ -1515,7 +1568,7 @@ body {
   .gmail-2pane.preview-open .gmail-list { display: none; }
   .gmail-2pane.preview-open .gmail-preview { display: block; }
   .email-preview-panel { padding: 20px; }
-  .preview-actions { justify-content: flex-start; margin-bottom: 14px; }
+  .preview-actions { justify-content: flex-start; margin-bottom: 14px; flex-wrap: wrap; }
 }
 
 /* ══════════════════════════════════════════════════════════

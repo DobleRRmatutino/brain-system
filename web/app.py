@@ -9,6 +9,8 @@ import httpx
 from datetime import date, datetime, timezone
 from collections import defaultdict
 from urllib.parse import urlencode
+from email.message import EmailMessage
+from email.utils import parseaddr
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -415,6 +417,21 @@ async def _gapi_get(url: str, session_token: str, params: dict = None):
             resp = await client.get(url, headers={"Authorization": f"Bearer {new_access}"}, params=params or {})
     return resp
 
+async def _gapi_post(url: str, session_token: str, json_body: dict):
+    gt     = _google_tokens.get(session_token, {})
+    access = gt.get("access_token")
+    if not access:
+        raise HTTPException(status_code=403, detail="Google no conectado. Ve a Inbox → Conectar Google.")
+    headers = {"Authorization": f"Bearer {access}"}
+    async with httpx.AsyncClient() as client:
+        resp = await client.post(url, headers=headers, json=json_body)
+        if resp.status_code == 401:
+            new_access = await _refresh_token(session_token)
+            if not new_access:
+                raise HTTPException(status_code=403, detail="Google no autorizado. Reconecta.")
+            resp = await client.post(url, headers={"Authorization": f"Bearer {new_access}"}, json=json_body)
+    return resp
+
 # ── Gmail ─────────────────────────────────────────────────────────────────────
 @app.get("/inbox")
 async def get_inbox(token: str = Depends(verify_token)):
@@ -447,6 +464,7 @@ async def get_inbox(token: str = Depends(verify_token)):
                 body    = _extract_message_body(data.get("payload", {}))
                 emails.append({
                     "id":      msg_id,
+                    "thread_id": data.get("threadId", ""),
                     "from":    headers.get("From", ""),
                     "subject": headers.get("Subject", "(sin asunto)"),
                     "date":    headers.get("Date", ""),
@@ -461,6 +479,69 @@ async def get_inbox(token: str = Depends(verify_token)):
         raise
     except Exception as e:
         logger.error("Error en /inbox: %s", e)
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@app.post("/gmail/reply")
+async def gmail_reply(request: Request, token: str = Depends(verify_token)):
+    try:
+        check_rate_limit(token)
+        body = await request.json()
+        message_id = (body.get("message_id") or "").strip()
+        reply_body = (body.get("body") or "").strip()
+        if not message_id:
+            return JSONResponse({"error": "No message_id"}, status_code=400)
+        if not reply_body:
+            return JSONResponse({"error": "El mensaje no puede estar vacío"}, status_code=400)
+
+        original_resp = await _gapi_get(
+            f"https://gmail.googleapis.com/gmail/v1/users/me/messages/{message_id}",
+            token,
+            params={"format": "metadata", "metadataHeaders": ["From", "Reply-To", "Subject", "Message-ID", "References"]},
+        )
+        if original_resp.status_code != 200:
+            return JSONResponse({"error": original_resp.text}, status_code=original_resp.status_code)
+
+        original_data = original_resp.json()
+        headers = {h["name"]: h["value"] for h in original_data.get("payload", {}).get("headers", [])}
+        thread_id = original_data.get("threadId", "")
+        reply_to_value = headers.get("Reply-To") or headers.get("From", "")
+        recipient = parseaddr(reply_to_value)[1]
+        if not recipient:
+            return JSONResponse({"error": "No se pudo determinar el destinatario para responder"}, status_code=400)
+
+        subject = headers.get("Subject", "(sin asunto)")
+        if not subject.lower().startswith("re:"):
+            subject = "Re: " + subject
+
+        original_message_header = headers.get("Message-ID", "").strip()
+        references = headers.get("References", "").strip()
+        if original_message_header:
+            references = (references + " " + original_message_header).strip() if references else original_message_header
+
+        message = EmailMessage()
+        message["To"] = recipient
+        message["Subject"] = subject
+        if original_message_header:
+            message["In-Reply-To"] = original_message_header
+        if references:
+            message["References"] = references
+        message.set_content(reply_body)
+
+        raw = base64.urlsafe_b64encode(message.as_bytes()).decode("utf-8").rstrip("=")
+        send_resp = await _gapi_post(
+            "https://gmail.googleapis.com/gmail/v1/users/me/messages/send",
+            token,
+            {"raw": raw, "threadId": thread_id},
+        )
+        if send_resp.status_code not in (200, 202):
+            return JSONResponse({"error": send_resp.text}, status_code=send_resp.status_code)
+
+        send_data = send_resp.json()
+        return JSONResponse({"ok": True, "id": send_data.get("id", ""), "thread_id": send_data.get("threadId", thread_id)})
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Error en /gmail/reply: %s", e)
         return JSONResponse({"error": str(e)}, status_code=500)
 
 # ── Calendar ──────────────────────────────────────────────────────────────────

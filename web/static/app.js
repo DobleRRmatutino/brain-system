@@ -831,6 +831,18 @@ function getEmailPreviewContainer() {
   return document.getElementById('email-preview');
 }
 
+function getReplyBodyInput() {
+  return document.getElementById('reply-body');
+}
+
+function getReplyStatusEl() {
+  return document.getElementById('reply-status');
+}
+
+function getReplySendBtn() {
+  return document.getElementById('reply-send-btn');
+}
+
 function getCalendarContainer() {
   return document.getElementById('cal-grid-wrap') || document.getElementById('event-list');
 }
@@ -1072,16 +1084,84 @@ function showEmailPreview(email, itemEl) {
     '<div class="email-preview-panel">' +
       (isMobile ? '<button class="email-back-btn" onclick="hideEmailPreview()">← Volver</button>' : '') +
       '<div class="preview-actions">' +
+        '<button class="btn" onclick="focusReplyComposer()">Responder</button>' +
         '<a href="' + esc(email.url || '#') + '" target="_blank" class="preview-open-link">Abrir en Gmail ↗</a>' +
       '</div>' +
       '<div class="preview-subject">' + esc(email.subject || '') + '</div>' +
       '<div class="preview-from">' + esc(fromName) + '</div>' +
       '<div class="preview-date">' + esc(emailTimeStr(email.date)) + '</div>' +
       '<div class="preview-body">' + esc(bodyText) + '</div>' +
+      '<div class="reply-composer">' +
+        '<div class="reply-label">Respuesta rápida</div>' +
+        '<textarea id="reply-body" class="reply-textarea" placeholder="Escribe una respuesta en texto plano..."></textarea>' +
+        '<div id="reply-status" class="reply-status" style="display:none"></div>' +
+        '<div class="reply-actions">' +
+          '<button class="btn btn-primary" id="reply-send-btn" onclick="sendEmailReply(\'' + esc(email.id || '') + '\')">Enviar respuesta</button>' +
+        '</div>' +
+      '</div>' +
     '</div>';
 
   preview.classList.add('active');
   if (isMobile && pane) pane.classList.add('preview-open');
+}
+
+function focusReplyComposer() {
+  var input = getReplyBodyInput();
+  if (input) input.focus();
+}
+
+async function sendEmailReply(messageId) {
+  var input = getReplyBodyInput();
+  var statusEl = getReplyStatusEl();
+  var btn = getReplySendBtn();
+  if (!input || !messageId) return;
+
+  var text = input.value.trim();
+  if (!text) {
+    if (statusEl) {
+      statusEl.style.display = 'block';
+      statusEl.className = 'reply-status error';
+      statusEl.textContent = 'Escribe una respuesta antes de enviar.';
+    }
+    return;
+  }
+
+  if (!confirm('¿Enviar esta respuesta por Gmail?')) return;
+
+  if (btn) btn.disabled = true;
+  if (statusEl) {
+    statusEl.style.display = 'block';
+    statusEl.className = 'reply-status sending';
+    statusEl.textContent = 'Enviando respuesta...';
+  }
+
+  try {
+    var res = await fetch('/gmail/reply', {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ message_id: messageId, body: text })
+    });
+    if (res.status === 401) { doLogout(); return; }
+    var data = await res.json();
+    if (!res.ok || data.error) {
+      throw new Error(data.error || ('Reply request failed with status ' + res.status));
+    }
+
+    input.value = '';
+    if (statusEl) {
+      statusEl.style.display = 'block';
+      statusEl.className = 'reply-status success';
+      statusEl.textContent = 'Respuesta enviada.';
+    }
+  } catch (e) {
+    if (statusEl) {
+      statusEl.style.display = 'block';
+      statusEl.className = 'reply-status error';
+      statusEl.textContent = 'Error: ' + e.message;
+    }
+  } finally {
+    if (btn) btn.disabled = false;
+  }
 }
 
 function hideEmailPreview() {
