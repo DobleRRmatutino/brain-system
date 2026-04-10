@@ -415,18 +415,22 @@ async def get_inbox(token: str = Depends(verify_token)):
 
 # ── Calendar ──────────────────────────────────────────────────────────────────
 @app.get("/calendar")
-async def get_calendar(token: str = Depends(verify_token)):
+async def get_calendar(request: Request, token: str = Depends(verify_token)):
     try:
-        now  = datetime.now(timezone.utc).isoformat()
+        time_min = request.query_params.get("time_min") or datetime.now(timezone.utc).isoformat()
+        time_max = request.query_params.get("time_max")
+        params = {
+            "timeMin":      time_min,
+            "maxResults":   50,
+            "singleEvents": "true",
+            "orderBy":      "startTime",
+        }
+        if time_max:
+            params["timeMax"] = time_max
         resp = await _gapi_get(
             "https://www.googleapis.com/calendar/v3/calendars/primary/events",
             token,
-            params={
-                "timeMin":      now,
-                "maxResults":   15,
-                "singleEvents": "true",
-                "orderBy":      "startTime",
-            },
+            params=params,
         )
         if resp.status_code != 200:
             return JSONResponse({"error": resp.text}, status_code=resp.status_code)

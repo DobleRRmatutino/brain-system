@@ -812,6 +812,22 @@ async function clearReminderById(pageId, btn) {
 
 // ── INBOX / GOOGLE ────────────────────────────────────────────────────────────
 var googleConnected = false;
+var calWeekOffset = 0;
+
+function avatarColor(str) {
+  var palette = ['#4A8EF5','#E57373','#81C784','#FFB74D','#BA68C8','#4DD0E1','#F06292','#AED581','#FF8A65','#90A4AE'];
+  var hash = 0;
+  for (var i = 0; i < str.length; i++) { hash = str.charCodeAt(i) + ((hash << 5) - hash); }
+  return palette[Math.abs(hash) % palette.length];
+}
+
+function emailTimeStr(rfcDate) {
+  if (!rfcDate) return '';
+  var d = new Date(rfcDate), now = new Date();
+  if (d.toDateString() === now.toDateString())
+    return d.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' });
+  return d.toLocaleDateString('es-PE', { day: '2-digit', month: 'short' });
+}
 
 async function checkGoogleStatus() {
   try {
@@ -849,6 +865,17 @@ function connectGoogle() {
   );
 }
 
+function switchInboxTab(tab) {
+  document.querySelectorAll('.inbox-tab').forEach(function(t){ t.classList.remove('active'); });
+  document.querySelectorAll('.inbox-pane').forEach(function(p){ p.classList.remove('active'); });
+  var tabEl  = document.getElementById('tab-' + tab);
+  var paneEl = document.getElementById('pane-' + tab);
+  if (tabEl)  tabEl.classList.add('active');
+  if (paneEl) paneEl.classList.add('active');
+  if (tab === 'gmail')    loadInbox();
+  if (tab === 'calendar') loadCalendar();
+}
+
 async function loadInbox() {
   var el = document.getElementById('email-list');
   if (!el) return;
@@ -867,7 +894,6 @@ async function loadInbox() {
     if (data.error) throw new Error(data.error);
     var emails  = data.emails || [];
     var unread  = emails.filter(function(e){ return e.unread; }).length;
-    // Actualizar badge
     var badge = document.getElementById('nav-unread');
     if (badge) {
       if (unread > 0) { badge.textContent = unread; badge.style.display = 'inline'; }
@@ -879,11 +905,15 @@ async function loadInbox() {
     }
     var html = '';
     emails.forEach(function(email) {
-      var fromShort = email.from.replace(/<[^>]+>/, '').trim() || email.from;
-      html += '<a href="'+email.url+'" target="_blank" class="email-item'+(email.unread?' unread':'')+'">' +
-        '<div class="email-from">'+esc(fromShort)+'</div>' +
-        '<div class="email-subject">'+esc(email.subject)+'</div>' +
-        '<div class="email-snippet">'+esc(email.snippet)+'</div>' +
+      var fromName = email.from.replace(/<[^>]+>/, '').trim() || email.from;
+      html += '<a href="' + email.url + '" target="_blank" class="email-item' + (email.unread ? ' unread' : '') + '">' +
+        '<div class="email-avatar" style="background:' + avatarColor(email.from) + '">' +
+          (email.from.charAt(0) || '?').toUpperCase() +
+          (email.unread ? '<div class="email-unread-dot"></div>' : '') +
+        '</div>' +
+        '<div class="email-from">' + esc(fromName) + '</div>' +
+        '<div class="email-time-col">' + esc(emailTimeStr(email.date)) + '</div>' +
+        '<div class="email-subject">' + esc(email.subject) + '</div>' +
         '</a>';
     });
     el.innerHTML = html;
@@ -892,12 +922,43 @@ async function loadInbox() {
   }
 }
 
+function calPrevWeek() { calWeekOffset--; loadCalendar(); }
+function calNextWeek() { calWeekOffset++; loadCalendar(); }
+function calGoToday()  { calWeekOffset = 0; loadCalendar(); }
+
 async function loadCalendar() {
-  var el = document.getElementById('event-list');
+  var el = document.getElementById('cal-grid-wrap');
   if (!el) return;
+
+  var HOUR_START = 7, HOUR_COUNT = 14, HOUR_H = 56;
+  var DAY_NAMES  = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
+  var EVT_COLORS = ['#4A8EF5','#E57373','#81C784','#FFB74D','#BA68C8','#4DD0E1'];
+
+  var today  = new Date();
+  var monday = new Date(today);
+  var dow    = today.getDay();
+  monday.setDate(today.getDate() - (dow === 0 ? 6 : dow - 1) + (calWeekOffset * 7));
+  monday.setHours(0, 0, 0, 0);
+  var sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+  sunday.setHours(23, 59, 59, 999);
+
+  var labelEl = document.getElementById('cal-week-label');
+  if (labelEl) {
+    labelEl.textContent =
+      monday.toLocaleDateString('es-PE', { day: '2-digit', month: 'short' }) +
+      ' — ' +
+      sunday.toLocaleDateString('es-PE', { day: '2-digit', month: 'short' });
+  }
+
   el.innerHTML = '<div class="inbox-loading"><span class="spin"></span> Cargando Calendar...</div>';
+
   try {
-    var res = await fetch('/calendar', { headers: authHeaders() });
+    var res = await fetch(
+      '/calendar?time_min=' + encodeURIComponent(monday.toISOString()) +
+      '&time_max=' + encodeURIComponent(sunday.toISOString()),
+      { headers: authHeaders() }
+    );
     if (res.status === 401) { doLogout(); return; }
     if (res.status === 403) {
       el.innerHTML = '<div class="inbox-empty">Google desconectado.</div>';
@@ -906,33 +967,101 @@ async function loadCalendar() {
     var data = await res.json();
     if (data.error) throw new Error(data.error);
     var events = data.events || [];
-    if (!events.length) {
-      el.innerHTML = '<div class="inbox-empty">Sin eventos próximos</div>';
-      return;
+
+    // Build day array: monday..sunday
+    var days = [];
+    for (var d = 0; d < 7; d++) {
+      var day = new Date(monday);
+      day.setDate(monday.getDate() + d);
+      days.push(day);
     }
-    var html = '';
-    events.forEach(function(ev) {
-      var startDate = ev.start ? new Date(ev.start) : null;
-      var dateStr   = '';
-      var timeStr   = '';
-      if (startDate) {
-        dateStr = startDate.toLocaleDateString('es-PE', {weekday:'short',day:'2-digit',month:'short'});
-        if (!ev.all_day) {
-          timeStr = startDate.toLocaleTimeString('es-PE', {hour:'2-digit',minute:'2-digit'});
-        }
-      }
-      html += '<a href="'+ev.url+'" target="_blank" class="event-item">' +
-        '<div class="event-date-col">' +
-          '<div class="event-date">'+dateStr+'</div>' +
-          (timeStr ? '<div class="event-time">'+timeStr+'</div>' : '<div class="event-time">Todo el día</div>') +
-        '</div>' +
-        '<div class="event-info">' +
-          '<div class="event-title">'+esc(ev.title)+'</div>' +
-          (ev.location ? '<div class="event-location">📍 '+esc(ev.location)+'</div>' : '') +
-        '</div>' +
-        '</a>';
+
+    var nowH   = today.getHours();
+    var nowMin = today.getMinutes();
+
+    // ── Header ────────────────────────────────────────────────────────────────
+    var headHtml = '<div class="cal-grid-head"><div class="cal-gutter-head"></div>';
+    days.forEach(function(day) {
+      var isToday = day.toDateString() === today.toDateString();
+      headHtml += '<div class="cal-day-head' + (isToday ? ' today' : '') + '">' +
+        DAY_NAMES[day.getDay()] +
+        '<span class="cal-day-head-num">' + day.getDate() + '</span>' +
+        '</div>';
     });
-    el.innerHTML = html;
+    headHtml += '</div>';
+
+    // ── Body ──────────────────────────────────────────────────────────────────
+    var bodyHtml = '<div class="cal-grid-body">';
+
+    // Gutter (time labels)
+    bodyHtml += '<div class="cal-gutter">';
+    for (var h = 0; h < HOUR_COUNT; h++) {
+      var hh = HOUR_START + h;
+      bodyHtml += '<div class="cal-time-label">' + (hh < 10 ? '0' : '') + hh + ':00</div>';
+    }
+    bodyHtml += '</div>';
+
+    // Day columns
+    days.forEach(function(day) {
+      var isToday = day.toDateString() === today.toDateString();
+      bodyHtml += '<div class="cal-day-col' + (isToday ? ' today-col' : '') + '">';
+
+      // Hour background stripes
+      for (var h = 0; h < HOUR_COUNT; h++) {
+        bodyHtml += '<div class="cal-hour-bg"></div>';
+      }
+
+      // Events for this day
+      events.forEach(function(ev, ei) {
+        var evStart = ev.start ? new Date(ev.start) : null;
+        var evEnd   = ev.end   ? new Date(ev.end)   : null;
+        if (!evStart) return;
+
+        if (ev.all_day) {
+          // all_day dates are YYYY-MM-DD strings — compare by date string
+          var evDateStr  = ev.start.substring(0, 10);
+          var dayDateStr = day.getFullYear() + '-' +
+            String(day.getMonth() + 1).padStart(2, '0') + '-' +
+            String(day.getDate()).padStart(2, '0');
+          if (evDateStr !== dayDateStr) return;
+          var color = EVT_COLORS[ei % EVT_COLORS.length];
+          bodyHtml += '<div class="cal-event-allday" style="position:absolute;top:3px;background:' + color + ';left:2px;right:2px;border-radius:3px;padding:1px 4px;font-size:10px;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;z-index:2">' +
+            esc(ev.title) + '</div>';
+        } else {
+          if (evStart.toDateString() !== day.toDateString()) return;
+          var startH = evStart.getHours() + evStart.getMinutes() / 60;
+          var endH   = evEnd ? (evEnd.getHours() + evEnd.getMinutes() / 60) : (startH + 1);
+          var durH   = Math.max(endH - startH, 0.25);
+          var topPx  = (startH - HOUR_START) * HOUR_H;
+          var htPx   = durH * HOUR_H;
+          var color  = EVT_COLORS[ei % EVT_COLORS.length];
+          var timeLabel = evStart.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }) +
+            (evEnd ? ' – ' + evEnd.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }) : '');
+          bodyHtml += '<a href="' + ev.url + '" target="_blank" class="cal-event-block" style="top:' + topPx + 'px;height:' + htPx + 'px;background:' + color + ';left:2px;right:2px">' +
+            '<div class="cal-event-block-title">' + esc(ev.title) + '</div>' +
+            '<div class="cal-event-block-time">' + esc(timeLabel) + '</div>' +
+            '</a>';
+        }
+      });
+
+      // Now line
+      if (isToday) {
+        var nowTop = (nowH + nowMin / 60 - HOUR_START) * HOUR_H;
+        bodyHtml += '<div class="cal-now-line" style="top:' + nowTop + 'px"></div>';
+      }
+
+      bodyHtml += '</div>';
+    });
+
+    bodyHtml += '</div>';
+
+    el.innerHTML = headHtml + bodyHtml;
+
+    // Auto-scroll to current hour
+    if (calWeekOffset === 0) {
+      el.scrollTop = (nowH - 8) * HOUR_H;
+    }
+
   } catch(e) {
     el.innerHTML = '<div class="inbox-empty" style="color:var(--red)">Error: '+esc(e.message)+'</div>';
   }
